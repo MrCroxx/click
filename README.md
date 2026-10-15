@@ -22,17 +22,18 @@ Requires **macOS 14+**. The interface defaults to **English**. Switch between En
 
 Download an architecture-matching app from [Releases](https://github.com/MrCroxx/click/releases), unzip it, and move **Click.app** to Applications before granting permissions or enabling launch at login. Builds are ad-hoc signed, not notarized; building from source is also supported.
 
-1. Open Click and grant **Accessibility** and **Input Monitoring** in Settings when needed.
-2. Select **Add device**, choose a connected keyboard, and add mappings.
-3. For a macro, first create its steps in the macro editor, then assign it to a key.
-4. Enable the device profile and click **Save**.
-5. Enable **Launch at login** if desired.
+1. Install and activate the official [Karabiner DriverKit VirtualHIDDevice](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases) package **8.5.0 or 8.6.0** (client protocol 7). Karabiner-Elements itself is not required.
+2. In Click Settings, enable **Keyboard Service**, approve it in macOS Login Items, and grant **Accessibility** and **Input Monitoring** when requested.
+3. Select **Add device**, choose a connected keyboard, and add mappings.
+4. For a macro, first create its steps in the macro editor, then assign it to a key.
+5. Enable the device profile and click **Save**.
+6. Enable **Launch at login** if desired.
 
 Adding a device starts with mappings disabled. Saving applies only enabled profiles. Pausing restores the previous mappings; starting resumes the last saved configuration. Closing the window keeps the service running. Quitting restores mappings and stops it.
 
 ## Build
 
-Use a Swift 6 toolchain on macOS, with Xcode or Command Line Tools installed.
+Use a Swift 6 toolchain and a C++23-capable Apple Clang toolchain on macOS. The pinned upstream virtual HID client uses C++23.
 
 ```sh
 make test
@@ -46,33 +47,38 @@ make release
 make demo
 ```
 
-`Click.app/Contents/MacOS/Click --background` starts with no window. The app is a **user-session background agent**: login startup uses `SMAppService.mainApp`, and input actions require a logged-in graphical session. It is not a root LaunchDaemon running before login. A crash requires reopening the app; there is no separate watchdog.
+`Click.app/Contents/MacOS/Click --background` starts the user agent with no window.
+The bundled **ClickDaemon** runs as a root LaunchDaemon; the UI registers it using
+`SMAppService.daemon`. It only accepts the active console user's signed Click
+app. Keyboard handling is leased to that agent; UI failure, session changes or
+loss of the virtual driver release the devices. App activation and text insertion
+remain in the user session. Launch at login starts the user agent.
 
 ## Configuration and recovery
 
 Files live in `~/Library/Application Support/Click/`:
 
 - `config.json` — atomically saved, validated configuration, restricted to the current user.
-- `recovery.json` — previous and applied HID mappings, written before changing the system.
+- `recovery.json` — legacy mapping journal, retained for migration from v0.1.x.
 
-Device identity uses vendor/product and serial number when present, otherwise the connection location. Devices without serial numbers may need a new profile after changing USB ports. Multiple keyboard interfaces with the same identity share a profile. Connected devices are checked every two seconds, and the saved mappings are reapplied after a connection change.
+Device identity uses vendor/product and serial number when present, otherwise the connection location. Devices without serial numbers may need a new profile after changing USB ports. Multiple keyboard interfaces with the same identity share a profile. Physical connection changes are handled by IOHID callbacks; UI discovery refreshes every two seconds.
 
-On pause, normal quit, or the next startup after a crash, Click restores the keys it still owns and preserves unrelated changes made by other software. A forced kill can leave mappings active until Click is reopened or the keyboard disconnects/system restarts. Do not delete the recovery file before restoring. Corrupt configuration or recovery files produce an error rather than being silently overwritten. Exported configuration can contain device serial numbers and macro text; review it before publishing.
+New mappings use exclusive HID capture and virtual HID output, without modifying system mapping properties. `recovery.json` is retained only to restore mappings left by older releases. Corrupt configuration/recovery files cause an error rather than being overwritten. Exported configuration can contain serial numbers and macro text; review it before publishing.
 
 ## Current limits
 
-- Ordinary keyboard-page keys are supported, including left/right modifiers. Fn, media keys, mouse buttons, gestures, and device firmware programming are not included.
-- Mapping triggers are single physical keys, not shortcut chords. Use a macro to emit a shortcut chord. Modifier keys cannot trigger macros.
-- Macros use **F13–F20 as reserved channels**, up to **8 enabled macro bindings across all profiles**. Those reserved function keys on any keyboard also trigger their assigned macros. Do not use them for other shortcuts while the profiles are enabled. Ordinary one-to-one mappings do not consume a channel.
-- Key mappings are based on physical key positions. Unicode text is a separate macro action; text injection may not work in secure input fields or apps that reject synthetic events.
-- A single macro runs at a time. Repeated/overlapping triggers are ignored. Application activation has a five-second deadline. After an application step, the foreground app is checked before each following step; a mismatch stops execution. Application launching already requested from macOS cannot be undone by cancellation.
-- Keyboard tools that seize a physical device (such as Karabiner-Elements) can prevent its native HID mappings from taking effect. Disable competing device handling for keyboards managed by Click. Virtual keyboards appear as separate devices.
-- The backend uses Apple's `UserKeyMapping` property and a Core Graphics event tap. macOS/device permission restrictions can reject mappings; Click checks the write result and reads it back. It does not install a privileged helper to bypass restrictions. Secure Input can prevent macro interception. Avoid relying on macros in password fields.
-- Login permissions, physical key delivery, Bluetooth reconnection, and behavior under Secure Input need validation on the target Mac. Automated tests verify configuration, restoration, and macro sequencing with simulated application/output adapters; they do not certify hardware behavior.
+- The raw HID backend is under hardware validation. Local tests and packaging pass; physical input/IME ordering, permission approval, Secure Input, logout/login and disconnect recovery require testing on the target Mac. Existing v0.1.x downloads still use the older backend.
+- Mappings support keyboard-page keys and left/right modifiers. Fn/media remapping, mouse mappings, firmware programming and Caps Lock LED synchronization are not implemented. Supported extra keyboard input pages pass through; unsupported compound interfaces are refused.
+- Triggers are single physical keys, scoped to their device. There are **no reserved F13–F20 channels and no eight-trigger limit**. Modifier keys cannot trigger macros.
+- Physical capture and shortcut output use HID before the normal input-method path. Explicit Unicode text insertion remains a separate user-session action and may be rejected by Secure Input or individual apps.
+- A single macro runs at a time. Overlapping triggers are ignored. Application activation has a five-second deadline; an unexpected focus change stops following actions. An already-requested app launch cannot be undone.
+- Other tools, including Karabiner-Elements, must not seize the same physical keyboards. Virtual keyboards are excluded from capture. Sleep pauses mappings; resume explicitly after waking.
+
+See [Input pipeline](docs/input-pipeline.md) for the privilege boundary, failure handling, driver version pin and hardware validation checklist.
 
 ## Development
 
-`ClickCore` contains the configuration schema, key catalog, mapping compiler, and ownership-aware restoration logic. `Click` contains the SwiftUI editor, AppKit menu bar, HID backend, macro executor, and login integration. CI runs tests and uploads an app archive.
+`ClickCore` contains the configuration schema, key catalog, raw HID router, and legacy restoration logic. `Click` contains the SwiftUI editor, AppKit menu bar, XPC client, macro executor, and login integration. `ClickDaemon` captures raw HID and uses the official pqrs virtual HID client through a small C++ adapter. CI runs tests and uploads an app archive.
 
 Translations live in `Sources/ClickCore/Resources/Translations.json`. Add a language to `AppLanguage` and provide the same keys and format arguments; localization tests check coverage. The app bundle includes these resources. Native system dialogs use macOS language preferences.
 

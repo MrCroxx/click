@@ -197,6 +197,13 @@ struct ContentView: View {
                 }
                 if model.loginStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
             }
+            settingsSection("Keyboard Service") {
+                settingsRow("Keyboard Service") {
+                    Toggle(tr("Keyboard Service"), isOn: Binding(get: { model.serviceStatus == .enabled || model.serviceStatus == .requiresApproval }, set: { model.setService($0) }))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(model.demo)
+                }
+                if model.serviceStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
+            }
             settingsSection("Permissions") {
                 permission("Accessibility", granted: model.accessibility) { model.requestAccessibility(); model.openSettings("Privacy_Accessibility") }
                 Divider()
@@ -211,10 +218,6 @@ struct ContentView: View {
                 Divider()
                 settingsRow("Background service") { Button(tr(model.running ? "Pause" : "Resume")) { model.toggleRunning() }.disabled(model.demo) }
             }
-            DisclosureGroup(tr("Advanced")) {
-                Text(tr("Macros reserve F13–F20 across all keyboards. Up to 8 triggers."))
-                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10)
-            }.foregroundStyle(.secondary)
         }.frame(maxWidth: 620, alignment: .leading)
     }
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

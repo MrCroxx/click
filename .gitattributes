@@ -1,0 +1,3 @@
+# Keep upstream files byte-for-byte, including their original line endings.
+Sources/VirtualHID/vendor/** linguist-vendored -whitespace
+Sources/VirtualHID/Licenses/** -whitespace

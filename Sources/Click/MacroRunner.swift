@@ -9,12 +9,12 @@ final class MacroRunner {
     private let authorized: () -> Bool
     private let frontmost: () -> String?
     private let activate: (String) async throws -> Void
-    private let shortcutOutput: ((Shortcut) throws -> Void)?
+    private let shortcutOutput: ((Shortcut) async throws -> Void)?
     private let textOutput: ((String) throws -> Void)?
     init(authorized: @escaping () -> Bool = { AXIsProcessTrusted() },
          frontmost: @escaping () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
          activate: @escaping (String) async throws -> Void = { try await MacroRunner.activateApplication($0) },
-         shortcutOutput: ((Shortcut) throws -> Void)? = nil,
+         shortcutOutput: ((Shortcut) async throws -> Void)? = nil,
          textOutput: ((String) throws -> Void)? = nil) {
         self.authorized = authorized; self.frontmost = frontmost; self.activate = activate
         self.shortcutOutput = shortcutOutput; self.textOutput = textOutput
@@ -45,7 +45,7 @@ final class MacroRunner {
                         expected = step.value
                     case .delay: try await Task.sleep(nanoseconds: UInt64(step.milliseconds) * 1_000_000)
                     case .shortcut:
-                        if let shortcutOutput { try shortcutOutput(step.shortcut) } else { try emit(step.shortcut) }
+                        if let shortcutOutput { try await shortcutOutput(step.shortcut) } else { try emit(step.shortcut) }
                     case .text:
                         if let textOutput { try textOutput(step.value) } else { try emitText(step.value) }
                     }
@@ -84,15 +84,7 @@ final class MacroRunner {
         event.post(tap: .cghidEventTap)
     }
     private func emit(_ shortcut: Shortcut) throws {
-        guard let code = KeyCatalog.virtual(shortcut.key),
-              let source = CGEventSource(stateID: .privateState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else { throw ClickError("Unable to create a keyboard event.") }
-        var flags: CGEventFlags = []
-        if shortcut.command { flags.insert(.maskCommand) }; if shortcut.option { flags.insert(.maskAlternate) }
-        if shortcut.control { flags.insert(.maskControl) }; if shortcut.shift { flags.insert(.maskShift) }
-        down.flags = flags; up.flags = flags
-        post(down); post(up)
+        throw ClickError("Keyboard service is not running.")
     }
     private func emitText(_ text: String) throws {
         guard let source = CGEventSource(stateID: .privateState) else { throw ClickError("Unable to create a keyboard event source.") }
@@ -108,46 +100,5 @@ final class MacroRunner {
             }
             post(down); post(up)
         }
-    }
-}
-
-final class MacroTap {
-    var triggers: [UInt16: UUID] = [:]
-    var onTrigger: (UUID) -> Void = { _ in }
-    var onFailure: () -> Void = {}
-    private var tap: CFMachPort?
-    private var source: CFRunLoopSource?
-    private var pressed = Set<UInt16>()
-    func start() throws {
-        guard tap == nil else { return }
-        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
-        guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
-            eventsOfInterest: CGEventMask(mask), callback: { _, type, event, context in
-                guard let context else { return Unmanaged.passUnretained(event) }
-                let owner = Unmanaged<MacroTap>.fromOpaque(context).takeUnretainedValue()
-                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                    owner.pressed.removeAll()
-                    owner.onFailure()
-                    return Unmanaged.passUnretained(event)
-                }
-                if event.getIntegerValueField(.eventSourceUserData) == MacroRunner.marker { return Unmanaged.passUnretained(event) }
-                let code = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-                guard let macro = owner.triggers[code] else { return Unmanaged.passUnretained(event) }
-                if type == .keyDown {
-                    if owner.pressed.insert(code).inserted && event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-                        owner.onTrigger(macro)
-                    }
-                } else { owner.pressed.remove(code) }
-                return nil
-            }, userInfo: Unmanaged.passUnretained(self).toOpaque()) else { throw ClickError("Grant Click Accessibility permission in System Settings, then retry.") }
-        self.tap = tap
-        source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-    }
-    func stop() {
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
-        if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
-        tap = nil; source = nil; triggers = [:]; pressed.removeAll()
     }
 }
