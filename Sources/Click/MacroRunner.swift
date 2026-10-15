@@ -23,8 +23,8 @@ final class MacroRunner {
     private(set) var busy = false
     func cancel() { generation = UUID(); task?.cancel(); task = nil; busy = false }
     func run(_ macro: Macro) {
-        guard !busy else { onStatus("宏正在执行，本次触发已忽略"); return }
-        guard authorized() else { onStatus("执行宏需要辅助功能权限"); return }
+        guard !busy else { onStatus("A macro is already running."); return }
+        guard authorized() else { onStatus("Accessibility permission is required to run macros."); return }
         busy = true
         let token = UUID(); generation = token
         task = Task { [weak self] in
@@ -35,13 +35,13 @@ final class MacroRunner {
                 for step in macro.steps {
                     try Task.checkCancellation()
                     if let expected, frontmost() != expected {
-                        throw ClickError("前台应用已改变，宏已停止。")
+                        throw ClickError("The foreground application changed. Macro stopped.")
                     }
                     switch step.kind {
                     case .application:
                         try await activate(step.value)
                         try Task.checkCancellation()
-                        guard frontmost() == step.value else { throw ClickError("应用未获得焦点，宏已停止。") }
+                        guard frontmost() == step.value else { throw ClickError("The application did not gain focus. Macro stopped.") }
                         expected = step.value
                     case .delay: try await Task.sleep(nanoseconds: UInt64(step.milliseconds) * 1_000_000)
                     case .shortcut:
@@ -52,20 +52,20 @@ final class MacroRunner {
                     // 给应用留出处理事件的时间，同时允许取消。
                     try await Task.sleep(nanoseconds: 30_000_000)
                 }
-                self.onStatus("已执行 · \(macro.name)")
-            } catch is CancellationError { self.onStatus("宏已取消") }
+                self.onStatus(L10n.format("Completed: %@", macro.name))
+            } catch is CancellationError { self.onStatus("Macro cancelled") }
             catch { self.onStatus(error.localizedDescription) }
         }
     }
     private static func activateApplication(_ identifier: String) async throws {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) else { throw ClickError("找不到应用：\(identifier)") }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) else { throw ClickError(L10n.format("Application not found: %@", identifier)) }
         let options = NSWorkspace.OpenConfiguration(); options.activates = true
         // 回调写入状态，等待循环可取消且有明确截止时间。
         var launchResult: Result<NSRunningApplication, Error>?
         NSWorkspace.shared.openApplication(at: url, configuration: options) { app, error in
             Task { @MainActor in
                 if let app { launchResult = .success(app) }
-                else { launchResult = .failure(error ?? ClickError("应用启动失败。")) }
+                else { launchResult = .failure(error ?? ClickError("Application launch failed.")) }
             }
         }
         let deadline = Date().addingTimeInterval(5)
@@ -77,7 +77,7 @@ final class MacroRunner {
             }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
-        throw ClickError("应用未获得焦点，宏已停止。")
+        throw ClickError("The application did not gain focus. Macro stopped.")
     }
     private func post(_ event: CGEvent) {
         event.setIntegerValueField(.eventSourceUserData, value: Self.marker)
@@ -87,7 +87,7 @@ final class MacroRunner {
         guard let code = KeyCatalog.virtual(shortcut.key),
               let source = CGEventSource(stateID: .privateState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else { throw ClickError("无法创建键盘事件。") }
+              let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else { throw ClickError("Unable to create a keyboard event.") }
         var flags: CGEventFlags = []
         if shortcut.command { flags.insert(.maskCommand) }; if shortcut.option { flags.insert(.maskAlternate) }
         if shortcut.control { flags.insert(.maskControl) }; if shortcut.shift { flags.insert(.maskShift) }
@@ -95,12 +95,12 @@ final class MacroRunner {
         post(down); post(up)
     }
     private func emitText(_ text: String) throws {
-        guard let source = CGEventSource(stateID: .privateState) else { throw ClickError("无法创建键盘事件源。") }
+        guard let source = CGEventSource(stateID: .privateState) else { throw ClickError("Unable to create a keyboard event source.") }
         // 按 Character 分块，避免切开 surrogate pair 或组合字符。
         for character in text {
             let units = Array(String(character).utf16)
             guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else { throw ClickError("无法创建文本事件。") }
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else { throw ClickError("Unable to create a text event.") }
             down.flags = []; up.flags = []
             units.withUnsafeBufferPointer { buffer in
                 down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
@@ -139,7 +139,7 @@ final class MacroTap {
                     }
                 } else { owner.pressed.remove(code) }
                 return nil
-            }, userInfo: Unmanaged.passUnretained(self).toOpaque()) else { throw ClickError("请在系统设置中授予 Click 辅助功能权限，然后重试。") }
+            }, userInfo: Unmanaged.passUnretained(self).toOpaque()) else { throw ClickError("Grant Click Accessibility permission in System Settings, then retry.") }
         self.tap = tap
         source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)

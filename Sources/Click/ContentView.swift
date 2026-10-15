@@ -4,274 +4,323 @@ import ServiceManagement
 import UniformTypeIdentifiers
 import ClickCore
 
-private let accent = Color(red: 0.30, green: 0.36, blue: 0.90)
-private let surface = Color(nsColor: .controlBackgroundColor)
+private func tr(_ key: String) -> String { L10n.text(key) }
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @AppStorage(L10n.preferenceKey) private var language = AppLanguage.english.rawValue
     var body: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: 218)
+            sidebar.frame(width: 208)
             Divider()
             VStack(spacing: 0) {
-                HStack {
-                    Label(model.demo ? "预览模式" : (model.running ? "后台运行中" : "已暂停"), systemImage: "circle.fill")
-                        .font(.system(size: 13, weight: .medium)).foregroundStyle(model.running ? .green : .secondary)
-                    Spacer()
-                    if model.dirty { Text("未保存").foregroundStyle(.secondary) }
-                    Button("保存并应用") { model.save() }.buttonStyle(.borderedProminent).tint(accent).keyboardShortcut("s")
-                }.padding(.horizontal, 32).padding(.vertical, 18)
+                toolbar
                 Divider()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 26) {
+                    VStack(alignment: .leading, spacing: 24) {
                         if let error = model.error {
-                            HStack(alignment: .top) {
-                                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
-                                Text(error).textSelection(.enabled)
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
+                                Text(tr(error)).textSelection(.enabled)
                                 Spacer()
-                                Button { model.error = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
-                            }.padding(16).background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                                IconButton("Dismiss", icon: "xmark") { model.error = nil }
+                            }.padding(12).background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
                         }
                         switch model.selection {
                         case "macros": macros
                         case "settings": settings
-                        default: devices
+                        default: mappings
                         }
-                    }.padding(32).frame(maxWidth: 1050, alignment: .leading)
+                    }.padding(32).frame(maxWidth: 880, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                Divider()
-                HStack {
-                    Text(model.message).lineLimit(2).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("停止宏") { model.runner.cancel() }.buttonStyle(.plain)
-                }.font(.system(size: 13)).padding(.horizontal, 32).padding(.vertical, 12)
-            }.background(Color(nsColor: .windowBackgroundColor))
-        }.tint(accent).font(.system(size: 14)).frame(minWidth: 960, minHeight: 660)
+                if !["Ready", "Preview"].contains(model.message) {
+                    HStack { Text(tr(model.message)).foregroundStyle(.secondary).lineLimit(2); Spacer() }
+                        .font(.system(size: 12)).padding(.horizontal, 32).padding(.vertical, 10)
+                }
+            }.background(Color(nsColor: .textBackgroundColor))
+        }
+        .font(.system(size: 13)).tint(.primary)
+        .frame(minWidth: 860, minHeight: 560)
+        .environment(\.locale, Locale(identifier: language))
+        .id(language)
+        .onChange(of: language) { _, _ in NotificationCenter.default.post(name: L10n.didChange, object: nil) }
     }
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 30) {
-            HStack(spacing: 12) {
-                Image(systemName: "cursorarrow.click.2").font(.system(size: 27, weight: .semibold)).foregroundStyle(.white)
-                    .frame(width: 46, height: 46).background(accent.gradient, in: RoundedRectangle(cornerRadius: 14))
-                Text("Click").font(.system(size: 28, weight: .bold, design: .rounded))
-            }.padding(.top, 38)
-            VStack(spacing: 8) {
-                navigation("devices", "设备与按键", "keyboard")
-                navigation("macros", "宏编排", "square.stack.3d.up")
-                navigation("settings", "设置", "slider.horizontal.3")
-            }
-            Spacer()
-            VStack(alignment: .leading, spacing: 14) {
-                Text("你的按键，\n你的工作方式。").font(.system(size: 20, weight: .semibold)).lineSpacing(5)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 9) {
+                Image(systemName: "cursorarrow.click").font(.system(size: 15, weight: .medium))
+                Text("Click").font(.system(size: 17, weight: .semibold))
+            }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 27)
+            navigation("devices", "Mappings", "keyboard")
+            navigation("macros", "Macros", "list.bullet.rectangle")
+            Divider().padding(.horizontal, 20).padding(.vertical, 18)
+            if model.selection == "macros" {
+                listHeading("Macros") { model.addMacro() }
+                ScrollView {
+                    VStack(spacing: 3) {
+                        ForEach(model.configuration.macros) { macro in
+                            item(macro.name, selected: model.selectedMacro == macro.id) { model.selectedMacro = macro.id }
+                        }
+                    }.padding(.horizontal, 10)
+                }
+            } else if model.selection == "devices" {
                 HStack {
-                    Button { model.importConfiguration() } label: { Label("载入", systemImage: "square.and.arrow.down") }
-                    Button { model.exportConfiguration() } label: { Label("导出", systemImage: "square.and.arrow.up") }
-                }.buttonStyle(.borderless)
-            }.padding(.bottom, 25)
-        }.padding(.horizontal, 20).background(.ultraThinMaterial)
+                    Text(tr("Devices")).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                    Spacer()
+                    deviceMenu.labelStyle(.iconOnly)
+                }.padding(.horizontal, 20).padding(.bottom, 10)
+                ScrollView {
+                    VStack(spacing: 3) {
+                        ForEach(model.configuration.profiles) { profile in
+                            item(profile.name, selected: model.selectedProfile == profile.id) { model.selectedProfile = profile.id }
+                        }
+                    }.padding(.horizontal, 10)
+                }
+            } else { Spacer() }
+            Spacer(minLength: 12)
+            navigation("settings", "Settings", "gearshape")
+            HStack(spacing: 7) {
+                Circle().fill(model.running ? Color.green.opacity(0.8) : Color.secondary.opacity(0.5)).frame(width: 5, height: 5)
+                Text(tr(model.demo ? "Preview" : model.running ? "Running" : "Paused")).foregroundStyle(.secondary)
+                Spacer()
+            }.font(.system(size: 11)).padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 18)
+        }.background(Color(nsColor: .windowBackgroundColor))
     }
     private func navigation(_ key: String, _ title: String, _ icon: String) -> some View {
-        Button { model.selection = key } label: {
-            HStack(spacing: 12) { Image(systemName: icon).frame(width: 23); Text(title); Spacer() }
-                .fontWeight(model.selection == key ? .semibold : .medium).padding(13)
-                .foregroundStyle(model.selection == key ? accent : .primary)
-                .background(model.selection == key ? accent.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 11))
+        Button {
+            model.selection = key
+            if model.selectedProfile == nil { model.selectedProfile = model.configuration.profiles.first?.id }
+            if model.selectedMacro == nil { model.selectedMacro = model.configuration.macros.first?.id }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon).font(.system(size: 14)).frame(width: 20)
+                Text(tr(title)).fontWeight(model.selection == key ? .medium : .regular)
+                Spacer()
+            }.padding(.horizontal, 10).padding(.vertical, 9)
+                .background(model.selection == key ? Color.primary.opacity(0.07) : .clear, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).padding(.horizontal, 10).padding(.bottom, 3)
+    }
+    private func item(_ name: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(name).lineLimit(2).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                if selected { Circle().fill(.primary.opacity(0.5)).frame(width: 4, height: 4) }
+            }.padding(.horizontal, 12).padding(.vertical, 9)
+                .foregroundStyle(selected ? .primary : .secondary)
+                .background(selected ? Color.primary.opacity(0.035) : .clear, in: RoundedRectangle(cornerRadius: 5))
+                .contentShape(Rectangle())
         }.buttonStyle(.plain)
     }
-    private func heading(_ title: String, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 34, weight: .bold))
-            Text(subtitle).font(.system(size: 15)).foregroundStyle(.secondary)
-        }
+    private func listHeading(_ title: String, add: @escaping () -> Void) -> some View {
+        HStack { Text(tr(title)).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary); Spacer(); IconButton("New Macro", icon: "plus", action: add) }
+            .padding(.horizontal, 20).padding(.bottom, 10)
     }
-    private var devices: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            heading("每一把键盘，都顺手。", "为不同设备安排独立的按键和动作。")
-            HStack(spacing: 14) {
-                metric("keyboard", "\(model.demo ? 1 : model.devices.count)", "已连接")
-                metric("arrow.triangle.branch", "\(model.configuration.profiles.reduce(0) { $0 + $1.bindings.count })", "按键映射")
-                metric("square.stack.3d.up", "\(model.configuration.macros.count)", "可用宏")
-            }
-            HStack {
-                Text("设备").font(.title3.bold())
-                Spacer()
-                Menu {
-                    if model.devices.isEmpty { Text("没有检测到键盘") }
-                    ForEach(model.devices) { device in Button(device.name) { model.addDevice(device) } }
-                } label: { Label("添加设备", systemImage: "plus") }.menuStyle(.borderlessButton).fixedSize()
-                Button { model.refresh() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.borderless)
-            }
-            if model.configuration.profiles.isEmpty {
-                VStack(spacing: 18) {
-                    Image(systemName: "keyboard.badge.ellipsis").font(.system(size: 46)).foregroundStyle(accent)
-                    Text("从一把键盘开始").font(.title2.bold())
-                    Text("选择已连接的设备，添加第一条映射。").foregroundStyle(.secondary)
-                    ForEach(model.devices) { device in
-                        Button { model.addDevice(device) } label: { Label(device.name, systemImage: "plus.circle.fill") }.buttonStyle(.bordered)
-                    }
-                    if model.devices.isEmpty { Text("连接 USB 或蓝牙键盘后点刷新。").foregroundStyle(.secondary) }
-                }.frame(maxWidth: .infinity).padding(36).card()
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(model.configuration.profiles) { profile in
-                            Button { model.selectedProfile = profile.id } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "keyboard").font(.title2)
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(profile.name).fontWeight(.semibold).lineLimit(1)
-                                        Text(model.connected(profile) ? "已连接" : "离线").foregroundStyle(.secondary)
-                                    }
-                                }.padding(16).frame(minWidth: 190, alignment: .leading)
-                                    .background(model.selectedProfile == profile.id ? accent.opacity(0.09) : surface, in: RoundedRectangle(cornerRadius: 14))
-                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(model.selectedProfile == profile.id ? accent.opacity(0.5) : .clear))
-                            }.buttonStyle(.plain)
-                        }
-                    }.padding(2)
-                }
-                if let index = model.configuration.profiles.firstIndex(where: { $0.id == model.selectedProfile }) {
-                    DeviceEditor(profile: $model.configuration.profiles[index], macros: model.configuration.macros) {
+    private var toolbar: some View {
+        HStack(spacing: 16) {
+            Text(tr(model.selection == "macros" ? "Macros" : model.selection == "settings" ? "Settings" : "Mappings"))
+                .font(.system(size: 13, weight: .medium))
+            Spacer()
+            if model.dirty { Circle().fill(.orange.opacity(0.8)).frame(width: 5, height: 5).help(tr("Unsaved changes")) }
+            Button(tr("Save")) { model.save() }.keyboardShortcut("s").disabled(!model.dirty).controlSize(.regular)
+            Menu {
+                Button(tr("Import…")) { model.importConfiguration() }
+                Button(tr("Export…")) { model.exportConfiguration() }
+                Divider()
+                Button(tr("Stop Macro")) { model.runner.cancel() }
+                Button(tr(model.running ? "Pause" : "Resume")) { model.toggleRunning() }.disabled(model.demo)
+            } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(tr("Options"))
+        }.padding(.horizontal, 26).frame(height: 52)
+    }
+    private var deviceMenu: some View {
+        Menu {
+            if model.devices.isEmpty { Text(tr("No keyboards connected")) }
+            ForEach(model.devices) { device in Button(device.name) { model.addDevice(device) } }
+        } label: { Label(tr("Add Device"), systemImage: "plus") }.menuStyle(.borderlessButton).fixedSize().help(tr("Add Device"))
+    }
+    private var mappings: some View {
+        Group {
+            if let index = model.configuration.profiles.firstIndex(where: { $0.id == model.selectedProfile }) {
+                DeviceEditor(profile: $model.configuration.profiles[index], macros: model.configuration.macros,
+                    connected: model.connected(model.configuration.profiles[index])) {
                         model.configuration.profiles.remove(at: index); model.selectedProfile = model.configuration.profiles.first?.id
                     }
-                } else {
-                    Text("选择设备开始编辑。").foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text(tr("Devices")).font(.system(size: 24, weight: .semibold))
+                    if model.devices.isEmpty {
+                        HStack { Text(tr("No keyboards connected")).foregroundStyle(.secondary); Spacer(); Button(tr("Refresh")) { model.refresh() } }
+                    }
+                    ForEach(model.devices) { device in
+                        HStack(spacing: 14) {
+                            Image(systemName: "keyboard").font(.system(size: 20)).foregroundStyle(.secondary)
+                            Text(device.name); Spacer()
+                            Button { model.addDevice(device) } label: { Image(systemName: "plus") }.help(tr("Add Device"))
+                        }
+                        Divider()
+                    }
                 }
             }
         }.onAppear { if model.selectedProfile == nil { model.selectedProfile = model.configuration.profiles.first?.id } }
     }
-    private func metric(_ icon: String, _ value: String, _ label: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon).font(.system(size: 23)).foregroundStyle(accent)
-            VStack(alignment: .leading, spacing: 3) { Text(value).font(.system(size: 25, weight: .semibold)); Text(label).foregroundStyle(.secondary) }
-            Spacer()
-        }.padding(20).card()
-    }
     private var macros: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack(alignment: .top) {
-                heading("一个按键，一段流程。", "按顺序组合动作，交给 Click 执行。")
-                Spacer()
-                Button { model.addMacro() } label: { Label("新建宏", systemImage: "plus") }.buttonStyle(.bordered)
-            }
-            if model.configuration.macros.isEmpty {
-                VStack(spacing: 20) {
-                    Image(systemName: "square.stack.3d.up").font(.system(size: 44)).foregroundStyle(accent)
-                    Text("把重复的事，连成一步。").font(.title2.bold())
-                    Text("切换应用 → 等待 → 发送快捷键").foregroundStyle(.secondary)
-                    Button("创建第一个宏") { model.addMacro() }.buttonStyle(.borderedProminent)
-                }.frame(maxWidth: .infinity).padding(40).card()
+        Group {
+            if let index = model.configuration.macros.firstIndex(where: { $0.id == model.selectedMacro }) {
+                MacroEditor(macro: $model.configuration.macros[index], demo: model.demo,
+                    run: {
+                        do { try model.configuration.validate(); model.runner.run(model.configuration.macros[index]) }
+                        catch { model.error = error.localizedDescription }
+                    }, delete: { model.deleteMacro(model.configuration.macros[index].id) })
             } else {
-                Picker("宏", selection: $model.selectedMacro) {
-                    ForEach(model.configuration.macros) { macro in Text(macro.name).tag(Optional(macro.id)) }
-                }.pickerStyle(.menu).frame(maxWidth: 350)
-                if let index = model.configuration.macros.firstIndex(where: { $0.id == model.selectedMacro }) {
-                    MacroEditor(macro: $model.configuration.macros[index], demo: model.demo,
-                        run: {
-                            do { try model.configuration.validate(); model.runner.run(model.configuration.macros[index]) }
-                            catch { model.error = error.localizedDescription }
-                        }, delete: { model.deleteMacro(model.configuration.macros[index].id) })
+                VStack(alignment: .leading, spacing: 20) {
+                    Text(tr("Macros")).font(.system(size: 24, weight: .semibold))
+                    Text(tr("No macros")).foregroundStyle(.secondary)
+                    Button(tr("New Macro")) { model.addMacro() }
                 }
             }
         }.onAppear { if model.selectedMacro == nil { model.selectedMacro = model.configuration.macros.first?.id } }
     }
     private var settings: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            heading("安静运行，随时就绪。", "关闭窗口后，Click 会留在菜单栏。")
-            VStack(spacing: 22) {
-                HStack {
-                    Label("后台服务", systemImage: "waveform.path").font(.headline)
-                    Spacer()
-                    Button(model.running ? "暂停" : "启动") { model.toggleRunning() }.disabled(model.demo)
+        VStack(alignment: .leading, spacing: 32) {
+            Text(tr("Settings")).font(.system(size: 24, weight: .semibold))
+            settingsSection("General") {
+                settingsRow("Language") {
+                    Picker(tr("Language"), selection: $language) {
+                        ForEach(AppLanguage.allCases) { Text($0.name).tag($0.rawValue) }
+                    }.labelsHidden().frame(width: 170)
                 }
                 Divider()
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) { Text("登录时启动").font(.headline); Text("登录 Mac 后自动在后台运行。").foregroundStyle(.secondary) }
-                    Spacer()
-                    Toggle("登录时启动", isOn: Binding(get: { model.loginStatus == .enabled || model.loginStatus == .requiresApproval }, set: { model.setLogin($0) }))
-                        .labelsHidden().toggleStyle(.switch).disabled(model.demo)
+                settingsRow("Launch at login") {
+                    Toggle(tr("Launch at login"), isOn: Binding(get: { model.loginStatus == .enabled || model.loginStatus == .requiresApproval }, set: { model.setLogin($0) }))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(model.demo)
                 }
-                if model.loginStatus == .requiresApproval {
-                    Button("在系统设置中允许登录项") { SMAppService.openSystemSettingsLoginItems() }
-                }
-            }.padding(24).card()
-            VStack(alignment: .leading, spacing: 20) {
-                Text("系统权限").font(.title3.bold())
-                permission("辅助功能", "拦截宏触发键、发送快捷键和文本。", model.accessibility) { model.requestAccessibility(); model.openSettings("Privacy_Accessibility") }
+                if model.loginStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
+            }
+            settingsSection("Permissions") {
+                permission("Accessibility", granted: model.accessibility) { model.requestAccessibility(); model.openSettings("Privacy_Accessibility") }
                 Divider()
-                permission("输入监控", "允许系统应用键盘映射。", model.inputMonitoring) { model.requestInputMonitoring(); model.openSettings("Privacy_ListenEvent") }
-            }.padding(24).card()
-            VStack(alignment: .leading, spacing: 12) {
-                Text("配置文件").font(.title3.bold())
-                Text("JSON 文件包含设备、映射和宏；载入后可检查，保存后生效。").foregroundStyle(.secondary)
-                HStack { Button("载入配置…") { model.importConfiguration() }; Button("导出配置…") { model.exportConfiguration() } }
-            }.padding(24).card()
-            Text("宏通道使用 F13–F20，最多 8 个触发键。启用后，对应功能键在所有键盘上都会触发宏。Fn、媒体键和鼠标按钮暂不支持。").foregroundStyle(.secondary)
+                permission("Input Monitoring", granted: model.inputMonitoring) { model.requestInputMonitoring(); model.openSettings("Privacy_ListenEvent") }
+            }
+            settingsSection("Configuration") {
+                HStack {
+                    Button(tr("Import…")) { model.importConfiguration() }
+                    Button(tr("Export…")) { model.exportConfiguration() }
+                    Spacer()
+                }.frame(minHeight: 46)
+                Divider()
+                settingsRow("Background service") { Button(tr(model.running ? "Pause" : "Resume")) { model.toggleRunning() }.disabled(model.demo) }
+            }
+            DisclosureGroup(tr("Advanced")) {
+                Text(tr("Macros reserve F13–F20 across all keyboards. Up to 8 triggers."))
+                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10)
+            }.foregroundStyle(.secondary)
+        }.frame(maxWidth: 620, alignment: .leading)
+    }
+    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(tr(title)).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+            VStack(spacing: 0, content: content)
         }
     }
-    private func permission(_ title: String, _ description: String, _ enabled: Bool, action: @escaping () -> Void) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: enabled ? "checkmark.circle.fill" : "circle.dashed").font(.title2).foregroundStyle(enabled ? .green : .secondary)
-            VStack(alignment: .leading, spacing: 5) { Text(title).fontWeight(.semibold); Text(description).foregroundStyle(.secondary) }
-            Spacer()
-            if !enabled { Button("授权", action: action).disabled(model.demo) }
+    private func settingsRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack { Text(tr(title)); Spacer(); content() }.frame(minHeight: 46)
+    }
+    private func permission(_ title: String, granted: Bool, action: @escaping () -> Void) -> some View {
+        settingsRow(title) {
+            if granted { Label(tr("Granted"), systemImage: "checkmark").foregroundStyle(.secondary) }
+            else { Button(tr("Open Settings"), action: action).disabled(model.demo) }
         }
     }
 }
 
-private extension View {
-    func card() -> some View { background(surface, in: RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(.primary.opacity(0.04))) }
+struct IconButton: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
+    init(_ title: String, icon: String, action: @escaping () -> Void) { self.title = title; self.icon = icon; self.action = action }
+    var body: some View {
+        Button(action: action) { Image(systemName: icon).frame(width: 20, height: 20).contentShape(Rectangle()) }
+            .buttonStyle(.plain).foregroundStyle(.secondary).help(tr(title)).accessibilityLabel(tr(title))
+    }
 }
 
 struct DeviceEditor: View {
     @Binding var profile: DeviceProfile
     let macros: [Macro]
+    let connected: Bool
     let delete: () -> Void
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            HStack {
-                TextField("设备名称", text: $profile.name).font(.title2.bold()).textFieldStyle(.plain)
-                Toggle("启用映射", isOn: $profile.enabled).toggleStyle(.switch)
+        VStack(alignment: .leading, spacing: 28) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField(tr("Device name"), text: $profile.name).textFieldStyle(.plain).font(.system(size: 24, weight: .semibold))
+                    Text(tr(connected ? "Connected" : "Offline")).foregroundStyle(.secondary).font(.system(size: 12))
+                }
+                Toggle(tr("Enabled"), isOn: $profile.enabled).toggleStyle(.switch).controlSize(.small)
             }
-            if profile.bindings.isEmpty {
-                Text("还没有映射。添加按键，选择它的新动作。").foregroundStyle(.secondary).padding(.vertical, 20)
-            }
-            ForEach($profile.bindings) { $binding in
-                HStack(spacing: 14) {
-                    KeyPicker(selection: $binding.source).frame(width: 160)
-                    Image(systemName: "arrow.right").foregroundStyle(.tertiary)
-                    Picker("类型", selection: $binding.kind) { Text("按键").tag(BindingKind.key); Text("宏").tag(BindingKind.macro) }
-                        .labelsHidden().frame(width: 85)
-                        .onChange(of: binding.kind) { _, kind in if kind == .macro && binding.macroID == nil { binding.macroID = macros.first?.id } }
-                    if binding.kind == .key {
-                        KeyPicker(selection: $binding.destination).frame(maxWidth: .infinity)
-                    } else {
-                        Picker("宏", selection: $binding.macroID) {
-                            Text("选择宏").tag(Optional<UUID>.none)
-                            ForEach(macros) { Text($0.name).tag(Optional($0.id)) }
-                        }.labelsHidden().frame(maxWidth: .infinity)
-                    }
-                    Button { profile.bindings.removeAll { $0.id == binding.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless).foregroundStyle(.secondary)
-                }.padding(16).background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 12))
+            VStack(spacing: 0) {
+                HStack {
+                    Text(tr("From")).frame(width: 160, alignment: .leading)
+                    Text(tr("Action")).frame(width: 100, alignment: .leading)
+                    Text(tr("To")).frame(maxWidth: .infinity, alignment: .leading)
+                    Color.clear.frame(width: 20, height: 1)
+                }.font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).padding(.horizontal, 12).padding(.bottom, 12)
+                Divider()
+                ForEach($profile.bindings) { $binding in
+                    HStack(spacing: 8) {
+                        KeyPicker(selection: $binding.source).frame(width: 160)
+                        ValueMenu(title: tr(binding.kind == .key ? "Key" : "Macro")) {
+                            Button(tr("Key")) { binding.kind = .key }
+                            Button(tr("Macro")) { binding.kind = .macro; if binding.macroID == nil { binding.macroID = macros.first?.id } }
+                        }.frame(width: 100)
+                        if binding.kind == .key { KeyPicker(selection: $binding.destination).frame(maxWidth: .infinity) }
+                        else {
+                            ValueMenu(title: macros.first(where: { $0.id == binding.macroID })?.name ?? tr("Choose a macro")) {
+                                ForEach(macros) { macro in Button(macro.name) { binding.macroID = macro.id } }
+                            }.frame(maxWidth: .infinity)
+                        }
+                        IconButton("Remove Mapping", icon: "minus") { profile.bindings.removeAll { $0.id == binding.id } }
+                    }.padding(.horizontal, 12).frame(height: 56)
+                    Divider()
+                }
+                if profile.bindings.isEmpty { Text(tr("No mappings")).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 24) }
             }
             HStack {
                 Button {
                     var binding = KeyBinding()
                     binding.source = ([57,58,59,60,61,62] + KeyCatalog.keys.map(\.id)).first { candidate in !profile.bindings.contains { $0.source == candidate } } ?? 57
                     profile.bindings.append(binding)
-                } label: { Label("添加映射", systemImage: "plus") }.buttonStyle(.borderless)
+                } label: { Label(tr("Add Mapping"), systemImage: "plus") }
                 Spacer()
-                Button("移除设备", role: .destructive, action: delete).buttonStyle(.borderless)
+                Menu { Button(tr("Remove Device"), role: .destructive, action: delete) } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(tr("Options"))
             }
-        }.padding(24).card()
+        }
+    }
+}
+
+struct ValueMenu<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        Menu(content: content) {
+            HStack {
+                Text(title).lineLimit(1)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary)
+            }.padding(.horizontal, 9).padding(.vertical, 7)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+                .contentShape(Rectangle())
+        }.menuStyle(.borderlessButton).menuIndicator(.hidden)
     }
 }
 
 struct KeyPicker: View {
     @Binding var selection: Int
     var body: some View {
-        Picker("按键", selection: $selection) {
-            ForEach(KeyCatalog.keys) { key in Text(key.name).tag(key.id) }
-        }.labelsHidden().pickerStyle(.menu)
+        ValueMenu(title: tr(KeyCatalog.name(selection))) {
+            ForEach(KeyCatalog.keys) { key in Button(tr(key.name)) { selection = key.id } }
+        }.accessibilityLabel(tr("Key") + ": " + tr(KeyCatalog.name(selection)))
     }
 }
 
@@ -281,60 +330,71 @@ struct MacroEditor: View {
     let run: () -> Void
     let delete: () -> Void
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 28) {
             HStack {
-                TextField("宏名称", text: $macro.name).font(.title2.bold()).textFieldStyle(.plain)
-                Button(action: run) { Label("运行", systemImage: "play.fill") }.disabled(demo)
-                Button(role: .destructive, action: delete) { Image(systemName: "trash") }.buttonStyle(.borderless)
+                TextField(tr("Macro name"), text: $macro.name).textFieldStyle(.plain).font(.system(size: 24, weight: .semibold))
+                Button(action: run) { Label(tr("Run"), systemImage: "play") }.disabled(demo)
+                Menu { Button(tr("Delete Macro"), role: .destructive, action: delete) } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(tr("Options"))
             }
-            ForEach(Array(macro.steps.enumerated()), id: \.element.id) { index, step in
-                HStack(alignment: .top, spacing: 16) {
-                    Text(String(format: "%02d", index + 1)).font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .foregroundStyle(accent).frame(width: 32).padding(.top, 16)
-                    VStack(alignment: .leading, spacing: 18) {
-                        HStack {
-                            Image(systemName: step.kind.icon).foregroundStyle(accent)
-                            Text(step.kind.title).font(.headline)
-                            Spacer()
-                            Button { macro.steps.swapAt(index, index - 1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0)
-                            Button { macro.steps.swapAt(index, index + 1) } label: { Image(systemName: "arrow.down") }.disabled(index == macro.steps.count - 1)
-                            Button { macro.steps.removeAll { $0.id == step.id } } label: { Image(systemName: "xmark") }
-                        }.buttonStyle(.borderless)
-                        StepEditor(step: $macro.steps[index])
-                    }.padding(20).background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 14))
+            VStack(spacing: 0) {
+                ForEach(Array(macro.steps.enumerated()), id: \.element.id) { index, step in
+                    HStack(alignment: .top, spacing: 18) {
+                        Text(String(format: "%02d", index + 1)).font(.system(size: 12, design: .monospaced)).foregroundStyle(.tertiary).frame(width: 24).padding(.top, 3)
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                Text(tr(step.kind.title)).fontWeight(.medium)
+                                Spacer()
+                                IconButton("Move Up", icon: "chevron.up") { macro.steps.swapAt(index, index - 1) }.disabled(index == 0)
+                                IconButton("Move Down", icon: "chevron.down") { macro.steps.swapAt(index, index + 1) }.disabled(index == macro.steps.count - 1)
+                                IconButton("Remove Step", icon: "minus") { macro.steps.removeAll { $0.id == step.id } }
+                            }
+                            StepEditor(step: $macro.steps[index])
+                        }
+                    }.padding(.vertical, 20)
+                    Divider()
                 }
             }
             Menu {
-                ForEach(StepKind.allCases, id: \.self) { kind in Button(kind.title, systemImage: kind.icon) { macro.steps.append(MacroStep(kind: kind)) } }
-            } label: { Label("添加步骤", systemImage: "plus.circle") }.menuStyle(.borderlessButton).fixedSize().padding(.leading, 48)
-        }.padding(24).card()
+                ForEach(StepKind.allCases, id: \.self) { kind in Button(tr(kind.title), systemImage: kind.icon) { macro.steps.append(MacroStep(kind: kind)) } }
+            } label: { Label(tr("Add Step"), systemImage: "plus") }.fixedSize()
+        }
     }
 }
+
 struct StepEditor: View {
     @Binding var step: MacroStep
     var body: some View {
         switch step.kind {
         case .shortcut:
-            HStack(spacing: 10) {
-                Toggle("⌃", isOn: $step.shortcut.control)
-                Toggle("⌥", isOn: $step.shortcut.option)
-                Toggle("⇧", isOn: $step.shortcut.shift)
-                Toggle("⌘", isOn: $step.shortcut.command)
-                KeyPicker(selection: $step.shortcut.key)
+            HStack(spacing: 6) {
+                Toggle("⌃", isOn: $step.shortcut.control).help("Control")
+                Toggle("⌥", isOn: $step.shortcut.option).help("Option")
+                Toggle("⇧", isOn: $step.shortcut.shift).help("Shift")
+                Toggle("⌘", isOn: $step.shortcut.command).help("Command")
+                KeyPicker(selection: $step.shortcut.key).frame(maxWidth: 200)
             }.toggleStyle(.button)
         case .application:
-            HStack {
-                TextField("com.apple.Notes", text: $step.value).textFieldStyle(.roundedBorder)
-                Button("选择应用…") {
+            HStack(spacing: 12) {
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: step.value) {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 24, height: 24)
+                    Text(FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: ""))
+                } else { Text(step.value.isEmpty ? tr("Application") : step.value).foregroundStyle(.secondary) }
+                Spacer()
+                Button(tr("Choose…")) {
                     let panel = NSOpenPanel(); panel.allowedContentTypes = [.applicationBundle]
                     panel.directoryURL = URL(fileURLWithPath: "/Applications"); panel.canChooseDirectories = false
                     if panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier { step.value = id }
                 }
             }
         case .delay:
-            HStack { TextField("时间", value: $step.milliseconds, format: .number).textFieldStyle(.roundedBorder).frame(width: 110); Text("毫秒").foregroundStyle(.secondary) }
+            HStack(spacing: 8) {
+                TextField(tr("Duration"), value: $step.milliseconds, format: .number).textFieldStyle(.roundedBorder).frame(width: 80)
+                Text(tr("ms")).foregroundStyle(.secondary)
+            }
         case .text:
-            TextEditor(text: $step.value).font(.body).frame(minHeight: 80).padding(6).background(surface, in: RoundedRectangle(cornerRadius: 8))
+            TextEditor(text: $step.value).font(.body).frame(minHeight: 76).padding(6)
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(.primary.opacity(0.12)))
+                .accessibilityLabel(tr("Text"))
         }
     }
 }

@@ -8,6 +8,10 @@ app="build/Click.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary_dir/Click" "$app/Contents/MacOS/Click"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+for bundle in "$binary_dir"/*.bundle; do
+    [[ -d "$bundle" ]] || continue
+    ditto "$bundle" "$app/Contents/Resources/$(basename "$bundle")"
+done
 swift scripts/icon.swift build/Click.iconset
 iconutil -c icns build/Click.iconset -o "$app/Contents/Resources/Click.icns"
 codesign --force --sign "${SIGNING_IDENTITY:--}" "$app"

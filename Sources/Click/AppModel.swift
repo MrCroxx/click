@@ -8,7 +8,7 @@ final class AppModel: ObservableObject {
     @Published var configuration = Configuration()
     @Published var devices: [ConnectedDevice] = []
     @Published var running = false
-    @Published var message = "准备就绪"
+    @Published var message = "Ready"
     @Published var error: String?
     @Published var loginStatus = SMAppService.mainApp.status
     @Published var accessibility = AXIsProcessTrusted()
@@ -39,7 +39,7 @@ final class AppModel: ObservableObject {
         }
         tap.onFailure = { [weak self] in
             DispatchQueue.main.async {
-                self?.pause(); self?.error = "系统停止了宏监听，已暂停映射。请检查权限并重新启动。"
+                self?.pause(); self?.error = "The macro listener stopped. Mappings are paused. Check permissions and resume."
             }
         }
         if demo { seedDemo(); return }
@@ -67,7 +67,7 @@ final class AppModel: ObservableObject {
         }
     }
     private func seedDemo() {
-        var macro = Macro(name: "专注写作")
+        var macro = Macro(name: "New Note")
         var app = MacroStep(kind: .application); app.value = "com.apple.Notes"
         var delay = MacroStep(kind: .delay); delay.milliseconds = 300
         var shortcut = MacroStep(kind: .shortcut); shortcut.shortcut = Shortcut(key: 17, command: true)
@@ -79,7 +79,7 @@ final class AppModel: ObservableObject {
         profile.bindings = [escape, focus]; profile.enabled = true
         configuration.profiles = [profile]; active = configuration
         selectedProfile = profile.id; selectedMacro = macro.id
-        message = "预览模式 · 不接管键盘"
+        message = "Preview"
     }
     func refreshDevices() {
         let services = hardware?.devices() ?? []
@@ -95,9 +95,9 @@ final class AppModel: ObservableObject {
         loginStatus = SMAppService.mainApp.status
         let previous = lastDeviceIDs
         refreshDevices()
-        if running && (!accessibility && !tap.triggers.isEmpty) { pause(); error = "辅助功能权限已撤销，映射已暂停。" }
+        if running && (!accessibility && !tap.triggers.isEmpty) { pause(); error = "Accessibility permission was revoked. Mappings are paused." }
         if running && previous != lastDeviceIDs {
-            do { try hardware?.apply(active, plan: MappingPlan(configuration: active)); message = "已同步连接的设备" }
+            do { try hardware?.apply(active, plan: MappingPlan(configuration: active)); message = "Connected devices updated" }
             catch { pause(); self.error = error.localizedDescription }
         }
     }
@@ -110,8 +110,8 @@ final class AppModel: ObservableObject {
     func save() {
         do {
             try configuration.validate()
-            if demo { active = configuration; message = "预览配置已更新"; return }
-            guard !loadFailed else { throw ClickError("启动时恢复或读取失败。请先修复配置文件并重启，避免覆盖原配置。") }
+            if demo { active = configuration; message = "Preview updated"; return }
+            guard !loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
             try pauseThrowing()
             let previous = active
             active = configuration
@@ -122,12 +122,12 @@ final class AppModel: ObservableObject {
                 try? pauseThrowing(); active = previous
                 throw error
             }
-            message = "配置已保存"; error = nil
+            message = "Saved"; error = nil
         } catch { self.error = error.localizedDescription }
     }
     func start() throws {
         guard !demo else { return }
-        guard hardware != nil else { throw ClickError("设备服务不可用，请重启 Click。") }
+        guard hardware != nil else { throw ClickError("Device service unavailable. Restart Click.") }
         try active.validate()
         let plan = try MappingPlan(configuration: active)
         if !plan.triggers.isEmpty {
@@ -140,7 +140,7 @@ final class AppModel: ObservableObject {
     }
     func toggleRunning() {
         if running { pause() }
-        else { do { try start(); message = "后台服务已启动"; error = nil } catch { self.error = error.localizedDescription } }
+        else { do { try start(); message = "Service started"; error = nil } catch { self.error = error.localizedDescription } }
     }
     private func pauseThrowing() throws {
         runner.cancel()
@@ -149,7 +149,7 @@ final class AppModel: ObservableObject {
         tap.stop(); running = false
     }
     func pause() {
-        do { try pauseThrowing(); message = "已暂停 · 原始键位已恢复" }
+        do { try pauseThrowing(); message = "Paused. Original mappings restored." }
         catch { self.error = error.localizedDescription }
     }
     func shutdown() -> Bool {
@@ -162,7 +162,7 @@ final class AppModel: ObservableObject {
         do {
             let imported = try Configuration.decode(Data(contentsOf: url))
             configuration = imported; selectedProfile = imported.profiles.first?.id; selectedMacro = imported.macros.first?.id
-            message = "已载入配置 · 保存后生效"; error = nil
+            message = "Configuration imported. Save to apply."; error = nil
         } catch { self.error = error.localizedDescription }
     }
     func exportConfiguration() {
@@ -170,7 +170,7 @@ final class AppModel: ObservableObject {
             let data = try configuration.encoded()
             let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "Click.json"
             guard panel.runModal() == .OK, let url = panel.url else { return }
-            try data.write(to: url, options: .atomic); message = "配置已导出"
+            try data.write(to: url, options: .atomic); message = "Configuration exported"
         } catch { self.error = error.localizedDescription }
     }
     func setLogin(_ enabled: Bool) {
@@ -188,12 +188,12 @@ final class AppModel: ObservableObject {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") { NSWorkspace.shared.open(url) }
     }
     func addMacro() {
-        let macro = Macro(steps: [MacroStep(kind: .shortcut)])
+        let macro = Macro(name: L10n.text("New Macro"), steps: [MacroStep(kind: .shortcut)])
         configuration.macros.append(macro); selectedMacro = macro.id
     }
     func deleteMacro(_ id: UUID) {
         guard !configuration.profiles.flatMap(\.bindings).contains(where: { $0.kind == .macro && $0.macroID == id }) else {
-            error = "这个宏仍被设备使用，请先移除对应映射。"; return
+            error = "This macro is assigned to a device. Remove its mappings first."; return
         }
         configuration.macros.removeAll { $0.id == id }; selectedMacro = configuration.macros.first?.id
     }

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ClickCore
 
 @main
 enum ClickApp {
@@ -22,42 +23,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let other = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.mrcroxx.click")
             .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
         if let other, !demo { other.activate(); NSApp.terminate(nil); return }
-        installMenu()
         model = AppModel(demo: demo)
+        installMenu()
         NSApp.setActivationPolicy(.accessory)
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item?.button?.image = NSImage(systemSymbolName: "cursorarrow.click.2", accessibilityDescription: "Click")
-        let menu = NSMenu()
-        menu.addItem(withTitle: "打开 Click", action: #selector(showWindow), keyEquivalent: ",").target = self
-        menu.addItem(withTitle: "启动 / 暂停", action: #selector(toggle), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "停止当前宏", action: #selector(cancelMacro), keyEquivalent: "").target = self
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "退出 Click", action: #selector(quit), keyEquivalent: "q").target = self
-        item?.menu = menu
+        installStatusMenu()
+        NotificationCenter.default.addObserver(forName: L10n.didChange, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.installMenu(); self?.installStatusMenu() }
+        }
         let event = NSAppleEventManager.shared().currentAppleEvent
         let launchedAtLogin = event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         if !launchedAtLogin && !CommandLine.arguments.contains("--background") { showWindow() }
+    }
+    private func installStatusMenu() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: L10n.text("Open Click"), action: #selector(showWindow), keyEquivalent: ",").target = self
+        menu.addItem(withTitle: L10n.text("Pause / Resume"), action: #selector(toggle), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L10n.text("Stop Macro"), action: #selector(cancelMacro), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: L10n.text("Quit Click"), action: #selector(quit), keyEquivalent: "q").target = self
+        item?.menu = menu
     }
     private func installMenu() {
         let bar = NSMenu()
         let appItem = NSMenuItem(); bar.addItem(appItem)
         let appMenu = NSMenu(); appItem.submenu = appMenu
-        appMenu.addItem(withTitle: "打开 Click", action: #selector(showWindow), keyEquivalent: ",").target = self
+        appMenu.addItem(withTitle: L10n.text("Open Click"), action: #selector(showWindow), keyEquivalent: ",").target = self
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出 Click", action: #selector(quit), keyEquivalent: "q").target = self
+        appMenu.addItem(withTitle: L10n.text("Quit Click"), action: #selector(quit), keyEquivalent: "q").target = self
         let editItem = NSMenuItem(); bar.addItem(editItem)
-        let edit = NSMenu(title: "编辑"); editItem.submenu = edit
-        for (title, action, key) in [("撤销", "undo:", "z"), ("剪切", "cut:", "x"), ("复制", "copy:", "c"), ("粘贴", "paste:", "v"), ("全选", "selectAll:", "a")] {
-            edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
+        let edit = NSMenu(title: L10n.text("Edit")); editItem.submenu = edit
+        for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
+            edit.addItem(withTitle: L10n.text(title), action: Selector(action), keyEquivalent: key)
         }
         NSApp.mainMenu = bar
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     @objc func showWindow() {
         if window == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.title = "Click"; window.titlebarAppearsTransparent = true
-            window.minSize = NSSize(width: 960, height: 660); window.isReleasedWhenClosed = false
+            window.minSize = NSSize(width: 860, height: 560); window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: ContentView(model: model))
             window.delegate = self; window.center(); self.window = window
         }

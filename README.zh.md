@@ -13,18 +13,19 @@
 - **载入与导出。** 带版本号的 JSON 保存设备、映射和宏；载入后先编辑，保存后生效。
 - **后台运行。** 关闭窗口后继续工作，在菜单栏暂停服务、停止宏或退出。
 - **登录自启动。** 在设置中开启，macOS 可能要求在登录项设置中批准。
+- **原生编辑器。** 紧凑侧栏、行式映射表和有序宏编辑器。切换语言会即时更新界面与菜单，并保留未保存的编辑。
 - **本地运行。** 无账号、网络服务、Shell 执行、分析统计或按键历史记录。
 
 ## 安装
 
-需要 **macOS 14 或更新版本**。首版界面使用中文。
+需要 **macOS 14 或更新版本**。界面默认使用 **English**。在 **Settings → Language** 中切换 English 或简体中文，应用会记住选择。
 
 从 [Releases](https://github.com/MrCroxx/click/releases) 下载符合 CPU 架构的应用，解压后将 **Click.app** 放到 Applications，再授权和启用登录项。构建采用临时签名，未经过 Apple 公证；也可以从源码构建。
 
 1. 打开 Click，在设置中按需授予**辅助功能**与**输入监控**权限。
 2. 点击**添加设备**，选择已连接的键盘，添加映射。
 3. 若要使用宏，先在宏编排页创建步骤，再把宏分配给按键。
-4. 打开设备的**启用映射**，点击**保存并应用**。
+4. 打开设备的**启用映射**，点击**保存**。
 5. 按需开启**登录时启动**。
 
 新添加的设备默认不启用映射。保存只应用已启用的配置。暂停会恢复原有键位；启动会恢复最近保存的配置。关闭窗口保持后台运行，退出会恢复映射并停止服务。
@@ -72,6 +73,8 @@ make demo
 ## 开发
 
 `ClickCore` 包含配置结构、键码表、映射编译和按所有权恢复逻辑；`Click` 包含 SwiftUI 编辑器、AppKit 菜单栏、HID 后端、宏执行器及登录项集成。CI 执行测试并上传应用压缩包。
+
+翻译集中在 `Sources/ClickCore/Resources/Translations.json`。新增语言时在 `AppLanguage` 中声明，并提供相同的键和格式参数；本地化测试会检查完整性。应用包包含语言资源。系统原生对话框使用 macOS 语言偏好。
 
 架构参考了 [Olanzi](https://github.com/MrCroxx/olanzi) 的原生宏和生命周期实现；本项目使用独立 UI 和通用键盘后端。相关 Apple 文档：[按键映射](https://developer.apple.com/library/archive/technotes/tn2450/)与[登录项注册](https://developer.apple.com/documentation/servicemanagement/smappservice/register())。
 

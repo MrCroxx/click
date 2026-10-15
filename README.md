@@ -13,18 +13,19 @@ A small native macOS app for per-device key mappings and keyboard macros. Runs i
 - **Load and export.** Versioned JSON files contain devices, mappings, and macros. Imported changes remain a draft until saved.
 - **Background operation.** Close the window and keep your mappings running. Pause, cancel a macro, or quit from the menu bar.
 - **Launch at login.** Enable it in Settings. macOS may require approval in Login Items.
+- **Native editor.** A compact sidebar, mapping rows, and an ordered macro editor. Language changes update the interface and menus without discarding drafts.
 - **Local only.** No account, network service, shell execution, analytics, or keyboard history.
 
 ## Install
 
-Requires **macOS 14+**. The initial UI is in Chinese.
+Requires **macOS 14+**. The interface defaults to **English**. Switch between English and 简体中文 in **Settings → Language**; your choice is remembered.
 
 Download an architecture-matching app from [Releases](https://github.com/MrCroxx/click/releases), unzip it, and move **Click.app** to Applications before granting permissions or enabling launch at login. Builds are ad-hoc signed, not notarized; building from source is also supported.
 
 1. Open Click and grant **Accessibility** and **Input Monitoring** in Settings when needed.
 2. Select **Add device**, choose a connected keyboard, and add mappings.
 3. For a macro, first create its steps in the macro editor, then assign it to a key.
-4. Enable the device profile and click **Save and apply**.
+4. Enable the device profile and click **Save**.
 5. Enable **Launch at login** if desired.
 
 Adding a device starts with mappings disabled. Saving applies only enabled profiles. Pausing restores the previous mappings; starting resumes the last saved configuration. Closing the window keeps the service running. Quitting restores mappings and stops it.
@@ -72,6 +73,8 @@ On pause, normal quit, or the next startup after a crash, Click restores the key
 ## Development
 
 `ClickCore` contains the configuration schema, key catalog, mapping compiler, and ownership-aware restoration logic. `Click` contains the SwiftUI editor, AppKit menu bar, HID backend, macro executor, and login integration. CI runs tests and uploads an app archive.
+
+Translations live in `Sources/ClickCore/Resources/Translations.json`. Add a language to `AppLanguage` and provide the same keys and format arguments; localization tests check coverage. The app bundle includes these resources. Native system dialogs use macOS language preferences.
 
 The architecture was informed by [Olanzi](https://github.com/MrCroxx/olanzi)'s native macro and lifecycle implementation; this repository has an independent UI and general keyboard backend. Relevant Apple documentation: [key remapping](https://developer.apple.com/library/archive/technotes/tn2450/) and [login registration](https://developer.apple.com/documentation/servicemanagement/smappservice/register()).
 

@@ -3,7 +3,7 @@ import Foundation
 public struct ClickError: LocalizedError {
     public let message: String
     public init(_ message: String) { self.message = message }
-    public var errorDescription: String? { message }
+    public var errorDescription: String? { L10n.text(message) }
 }
 
 public struct DeviceIdentity: Codable, Equatable, Hashable, Sendable {
@@ -37,7 +37,7 @@ public struct Shortcut: Codable, Equatable, Sendable {
 public enum StepKind: String, Codable, CaseIterable, Sendable {
     case shortcut, application, delay, text
     public var title: String {
-        switch self { case .shortcut: return "快捷键"; case .application: return "切换应用"; case .delay: return "等待"; case .text: return "输入文本" }
+        switch self { case .shortcut: return "Shortcut"; case .application: return "Switch Application"; case .delay: return "Delay"; case .text: return "Type Text" }
     }
     public var icon: String {
         switch self { case .shortcut: return "command"; case .application: return "app.badge"; case .delay: return "clock"; case .text: return "text.cursor" }
@@ -53,9 +53,9 @@ public struct MacroStep: Codable, Equatable, Identifiable, Sendable {
 }
 public struct Macro: Codable, Equatable, Identifiable, Sendable {
     public var id = UUID()
-    public var name = "新宏"
+    public var name = "New Macro"
     public var steps: [MacroStep] = []
-    public init(name: String = "新宏", steps: [MacroStep] = []) { self.name = name; self.steps = steps }
+    public init(name: String = "New Macro", steps: [MacroStep] = []) { self.name = name; self.steps = steps }
 }
 public enum BindingKind: String, Codable, CaseIterable, Sendable { case key, macro }
 public struct KeyBinding: Codable, Equatable, Identifiable, Sendable {
@@ -80,48 +80,48 @@ public struct Configuration: Codable, Equatable, Sendable {
     public var macros: [Macro] = []
     public init() {}
     public func validate() throws {
-        guard version == 1 else { throw ClickError("不支持的配置版本：\(version)") }
-        guard profiles.count <= 64, macros.count <= 128 else { throw ClickError("配置过大。") }
-        guard Set(profiles.map(\.id)).count == profiles.count, Set(macros.map(\.id)).count == macros.count else { throw ClickError("配置包含重复 ID。") }
+        guard version == 1 else { throw ClickError(L10n.format("Unsupported configuration version: %d", version)) }
+        guard profiles.count <= 64, macros.count <= 128 else { throw ClickError("Configuration is too large.") }
+        guard Set(profiles.map(\.id)).count == profiles.count, Set(macros.map(\.id)).count == macros.count else { throw ClickError("Duplicate configuration IDs.") }
         for (index, profile) in profiles.enumerated() {
-            guard !profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ClickError("设备名称不能为空。") }
-            guard profile.device.vendor >= 0, profile.device.product >= 0, profile.device.location >= 0 else { throw ClickError("设备标识无效。") }
-            if profiles.prefix(index).contains(where: { $0.device.matches(profile.device) || profile.device.matches($0.device) }) { throw ClickError("同一设备只能有一个配置。") }
+            guard !profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ClickError("A device name is required.") }
+            guard profile.device.vendor >= 0, profile.device.product >= 0, profile.device.location >= 0 else { throw ClickError("Invalid device identity.") }
+            if profiles.prefix(index).contains(where: { $0.device.matches(profile.device) || profile.device.matches($0.device) }) { throw ClickError("Only one profile is allowed per device.") }
             guard profile.bindings.count <= 128,
                   Set(profile.bindings.map(\.source)).count == profile.bindings.count,
-                  Set(profile.bindings.map(\.id)).count == profile.bindings.count else { throw ClickError("设备包含重复按键或过多映射。") }
+                  Set(profile.bindings.map(\.id)).count == profile.bindings.count else { throw ClickError("Duplicate keys or too many mappings.") }
             for binding in profile.bindings {
-                guard KeyCatalog.keys.contains(where: { $0.id == binding.source }) else { throw ClickError("无效的输入键。") }
+                guard KeyCatalog.keys.contains(where: { $0.id == binding.source }) else { throw ClickError("Invalid source key.") }
                 switch binding.kind {
                 case .key:
-                    guard KeyCatalog.keys.contains(where: { $0.id == binding.destination }) else { throw ClickError("无效的输出键。") }
+                    guard KeyCatalog.keys.contains(where: { $0.id == binding.destination }) else { throw ClickError("Invalid destination key.") }
                 case .macro:
-                    guard macros.contains(where: { $0.id == binding.macroID }) else { throw ClickError("映射引用的宏不存在。") }
-                    guard !KeyCatalog.isModifier(binding.source) else { throw ClickError("修饰键不能作为宏触发键。") }
+                    guard macros.contains(where: { $0.id == binding.macroID }) else { throw ClickError("The assigned macro no longer exists.") }
+                    guard !KeyCatalog.isModifier(binding.source) else { throw ClickError("Modifier keys cannot trigger macros.") }
                 }
             }
         }
         for macro in macros {
             guard !macro.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   !macro.steps.isEmpty, macro.steps.count <= 100,
-                  Set(macro.steps.map(\.id)).count == macro.steps.count else { throw ClickError("宏需要名称和 1–100 个步骤，步骤 ID 不能重复。") }
+                  Set(macro.steps.map(\.id)).count == macro.steps.count else { throw ClickError("A macro needs a name and 1–100 uniquely identified steps.") }
             for step in macro.steps {
                 switch step.kind {
                 case .shortcut:
-                    guard KeyCatalog.keys.contains(where: { $0.id == step.shortcut.key }), !KeyCatalog.isModifier(step.shortcut.key) else { throw ClickError("快捷键需要一个普通按键。") }
+                    guard KeyCatalog.keys.contains(where: { $0.id == step.shortcut.key }), !KeyCatalog.isModifier(step.shortcut.key) else { throw ClickError("A shortcut needs a non-modifier key.") }
                 case .application:
-                    guard !step.value.isEmpty, step.value.contains("."), !step.value.contains("/") else { throw ClickError("请选择应用或填写 Bundle ID。") }
+                    guard !step.value.isEmpty, step.value.contains("."), !step.value.contains("/") else { throw ClickError("Choose an application or enter its bundle identifier.") }
                 case .delay:
-                    guard (0...60_000).contains(step.milliseconds) else { throw ClickError("等待时间应为 0–60000 毫秒。") }
+                    guard (0...60_000).contains(step.milliseconds) else { throw ClickError("Delay must be between 0 and 60,000 ms.") }
                 case .text:
-                    guard step.value.utf16.count <= 4096 else { throw ClickError("单步文本不能超过 4096 个 UTF-16 单元。") }
+                    guard step.value.utf16.count <= 4096 else { throw ClickError("Text cannot exceed 4,096 UTF-16 units per step.") }
                 }
             }
         }
         _ = try MappingPlan(configuration: self)
     }
     public static func decode(_ data: Data) throws -> Self {
-        guard data.count <= 2_000_000 else { throw ClickError("配置文件不能超过 2 MB。") }
+        guard data.count <= 2_000_000 else { throw ClickError("Configuration files cannot exceed 2 MB.") }
         let value = try JSONDecoder().decode(Self.self, from: data)
         try value.validate()
         return value
@@ -150,11 +150,11 @@ public struct MappingPlan {
         // F13–F20 是宏的传输键；按全局配置稳定分配，设备离线不改变编号。
         let active = configuration.profiles.filter(\.enabled)
         let macroBindings = active.flatMap(\.bindings).filter { $0.kind == .macro }
-        guard macroBindings.count <= 8 else { throw ClickError("最多同时启用 8 个宏触发键。") }
+        guard macroBindings.count <= 8 else { throw ClickError("A maximum of 8 macro triggers can be enabled.") }
         let reserved = Set((0..<macroBindings.count).map { 104 + $0 })
         for binding in active.flatMap(\.bindings) {
             if reserved.contains(binding.source) || (binding.kind == .key && reserved.contains(binding.destination)) {
-                throw ClickError("F13–F\(12 + macroBindings.count) 已被宏保留，请选择其他按键。")
+                throw ClickError(L10n.format("F13–F%d are reserved for macros. Choose another key.", 12 + macroBindings.count))
             }
         }
         var slot = 104

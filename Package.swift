@@ -4,7 +4,7 @@ let package = Package(
     name: "Click", platforms: [.macOS(.v14)],
     products: [.executable(name: "Click", targets: ["Click"])],
     targets: [
-        .target(name: "ClickCore"),
+        .target(name: "ClickCore", resources: [.process("Resources")]),
         .executableTarget(name: "Click", dependencies: ["ClickCore"]),
         .testTarget(name: "ClickCoreTests", dependencies: ["ClickCore"]),
         .testTarget(name: "ClickRuntimeTests", dependencies: ["Click", "ClickCore"])

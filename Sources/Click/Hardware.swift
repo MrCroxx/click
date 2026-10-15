@@ -46,7 +46,7 @@ final class Hardware {
     private func write(_ mappings: [HIDMapping], to service: IOHIDServiceClient) throws {
         let raw = try JSONSerialization.jsonObject(with: JSONEncoder().encode(mappings)) as! NSArray
         guard IOHIDServiceClientSetProperty(service, "UserKeyMapping" as CFString, raw), try read(service) == mappings else {
-            throw ClickError("系统拒绝设备映射。请开启输入监控权限，再重试；某些系统或设备可能限制字母键映射。")
+            throw ClickError("macOS rejected the mapping. Enable Input Monitoring and retry. Some devices or system versions restrict letter-key mappings.")
         }
     }
     private func saveJournal() throws {
@@ -85,7 +85,7 @@ final class Hardware {
             }
         } catch {
             let failure = error
-            do { try restore() } catch { throw ClickError("\(failure.localizedDescription)；恢复也失败：\(error.localizedDescription)") }
+            do { try restore() } catch { throw ClickError(L10n.format("%@ Recovery also failed: %@", failure.localizedDescription, error.localizedDescription)) }
             throw failure
         }
     }
