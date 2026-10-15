@@ -23,7 +23,6 @@ struct ContentView: View {
                                 Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
                                 Text(tr(error)).textSelection(.enabled)
                                 Spacer()
-                                IconButton("Dismiss", icon: "xmark") { model.error = nil }
                             }.padding(12).background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
                         }
                         switch model.selection {

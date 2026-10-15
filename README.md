@@ -64,6 +64,8 @@ remain in the user session. Launch at login starts the user agent.
 Packaging checks launchd's explicit arguments and validates the daemon's enclosing
 app signature from `/`, with a bundle-relative `argv[0]`. The **Enabled** device
 switch stores intent; **Running** confirms that the service applied the mappings.
+Mapping errors stay visible until a subsequent operation clears or replaces them;
+they cannot be dismissed while troubleshooting a paused service.
 If macOS disallows the background item after an update, allow Click in
 System Settings → General → Login Items & Extensions before resuming.
 

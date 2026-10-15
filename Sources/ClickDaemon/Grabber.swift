@@ -58,9 +58,12 @@ final class Grabber {
     }
     private func inputElements(_ device: IOHIDDevice) -> [IOHIDElement] {
         let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? 0
+        // FIFO-connected Apple keyboards can omit USB vendor/product IDs.
+        let builtIn = (IOHIDDeviceGetProperty(device, "Built-In" as CFString) as? NSNumber)?.boolValue == true
+        let manufacturer = IOHIDDeviceGetProperty(device, kIOHIDManufacturerKey as CFString) as? String
         return (IOHIDDeviceCopyMatchingElements(device, nil, 0) as? [IOHIDElement] ?? []).filter {
             [kIOHIDElementTypeInput_Misc, kIOHIDElementTypeInput_Button, kIOHIDElementTypeInput_Axis, kIOHIDElementTypeInput_ScanCodes].contains(IOHIDElementGetType($0)) &&
-            HIDInterfacePolicy.isKeyValue(vendor: vendor, page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0), reportSize: IOHIDElementGetReportSize($0))
+            HIDInterfacePolicy.isKeyValue(vendor: vendor, isBuiltInApple: builtIn && manufacturer == "Apple", page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0), reportSize: IOHIDElementGetReportSize($0))
         }
     }
     private func reconcile() throws {
