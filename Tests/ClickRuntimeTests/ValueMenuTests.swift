@@ -21,4 +21,24 @@ final class ValueMenuTests: XCTestCase {
         button.menu!.performActionForItem(at: 2)
         XCTAssertEqual(selection, "Macro")
     }
+    @MainActor func testRefreshDoesNotDismissTrackingMenuOrReleaseItsAction() async {
+        let button = NSPopUpButton(frame: .zero, pullsDown: true)
+        let coordinator = ValueMenu.Coordinator()
+        var selected = false
+        ValueMenu(title: "Key", entries: [.init(title: "Macro", action: { selected = true })])
+            .update(button, coordinator: coordinator)
+        let openMenu = button.menu!
+        coordinator.menuWillOpen(openMenu)
+        for _ in 0..<5 {
+            ValueMenu(title: "Updated", entries: []).update(button, coordinator: coordinator)
+        }
+        XCTAssertTrue(button.menu === openMenu)
+        XCTAssertEqual(button.title, "Key")
+        openMenu.performActionForItem(at: 1)
+        XCTAssertTrue(selected)
+        coordinator.menuDidClose(openMenu)
+        await Task.yield()
+        XCTAssertFalse(coordinator.tracking)
+    }
+
 }

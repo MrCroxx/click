@@ -328,10 +328,48 @@ struct ValueMenu: NSViewRepresentable {
         init(_ perform: @escaping () -> Void) { self.perform = perform }
         @objc func invoke(_ sender: NSMenuItem) { perform() }
     }
-    final class Coordinator { var actions: [Action] = [] }
+    final class NeutralCell: NSPopUpButtonCell {
+        override func titleRect(forBounds rect: NSRect) -> NSRect {
+            var title = super.titleRect(forBounds: rect)
+            title.size.width = max(0, title.width - 18)
+            return title
+        }
+    }
+    final class NeutralButton: NSPopUpButton {
+        override func draw(_ dirtyRect: NSRect) {
+            super.draw(dirtyRect)
+            let path = NSBezierPath()
+            let x = bounds.maxX - 14, y = bounds.midY
+            path.move(to: NSPoint(x: x - 3, y: y - 1.5))
+            path.line(to: NSPoint(x: x, y: y + 1.5))
+            path.line(to: NSPoint(x: x + 3, y: y - 1.5))
+            path.lineWidth = 1.4; path.lineCapStyle = .round; path.lineJoinStyle = .round
+            NSColor.secondaryLabelColor.setStroke(); path.stroke()
+        }
+    }
+    final class Coordinator: NSObject, NSMenuDelegate {
+        var actions: [Action] = []
+        var tracking = false
+        var pendingUpdate: (() -> Void)?
+        func menuWillOpen(_ menu: NSMenu) { tracking = true }
+        func menuDidClose(_ menu: NSMenu) {
+            tracking = false
+            // Let AppKit finish dispatching the selected item's action first.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.tracking else { return }
+                let update = self.pendingUpdate
+                self.pendingUpdate = nil
+                update?()
+            }
+        }
+    }
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: true)
+        let button = NeutralButton(frame: .zero, pullsDown: true)
+        let cell = NeutralCell(textCell: "", pullsDown: true)
+        cell.arrowPosition = .noArrow
+        cell.lineBreakMode = .byTruncatingTail
+        button.cell = cell
         button.bezelStyle = .rounded
         button.alignment = .left
         button.font = .systemFont(ofSize: 13)
@@ -342,6 +380,16 @@ struct ValueMenu: NSViewRepresentable {
         update(button, coordinator: context.coordinator)
     }
     func update(_ button: NSPopUpButton, coordinator: Coordinator) {
+        // Status/heartbeat publications refresh this representable while AppKit
+        // runs its tracking loop. Replacing its menu then dismisses a real click.
+        if coordinator.tracking {
+            coordinator.pendingUpdate = { [weak button, weak coordinator] in
+                guard let button, let coordinator else { return }
+                self.update(button, coordinator: coordinator)
+            }
+            return
+        }
+        coordinator.pendingUpdate = nil
         coordinator.actions.removeAll()
         func menu(_ entries: [Entry]) -> NSMenu {
             let result = NSMenu()
@@ -363,6 +411,7 @@ struct ValueMenu: NSViewRepresentable {
         // A pull-down button displays its first item as the label, but hides it
         // from the menu. AppKit owns hit testing across the entire control.
         result.insertItem(withTitle: title, action: nil, keyEquivalent: "", at: 0)
+        result.delegate = coordinator
         button.menu = result
         button.title = title
         button.setAccessibilityLabel(title)
