@@ -60,6 +60,8 @@ The bundled **ClickDaemon** runs as a root LaunchDaemon; the UI registers it usi
 app. Keyboard handling is leased to that agent; UI failure, session changes or
 loss of the virtual driver release the devices. App activation and text insertion
 remain in the user session. Launch at login starts the user agent.
+The heartbeat continues while menus or modal panels are open; the daemon still
+releases keyboards if the agent stops responding for five seconds.
 
 Packaging checks launchd's explicit arguments and validates the daemon's enclosing
 app signature from `/`, with a bundle-relative `argv[0]`. The **Enabled** device

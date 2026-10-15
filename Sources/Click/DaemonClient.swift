@@ -53,7 +53,7 @@ import ClickIPC
         guard generation == token else { stop(); throw CancellationError() }
         active = true
         heartbeatTimer?.invalidate()
-        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.heartbeat() } }
+        heartbeatTimer = ServiceHeartbeat.schedule { [weak self] in self?.heartbeat() }
     }
     private func heartbeat() {
         guard active, let connection else { return }
