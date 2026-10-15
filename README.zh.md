@@ -20,7 +20,7 @@
 
 需要 **macOS 14 或更新版本**。界面默认使用 **English**。在 **Settings → Language** 中切换 English 或简体中文，应用会记住选择。
 
-从 [Releases](https://github.com/MrCroxx/click/releases) 下载符合 CPU 架构的应用，解压后将 **Click.app** 放到 Applications，再授权和启用登录项。构建采用临时签名，未经过 Apple 公证；也可以从源码构建。
+从 [Releases](https://github.com/MrCroxx/click/releases) 下载符合 CPU 架构的应用，打开 DMG（或解压 ZIP）后将 **Click.app** 放到 Applications，再授权和启用登录项。本地构建使用钥匙串中的固定签名身份，CI 产物明确使用临时签名；两者均未经过 Apple 公证。也可以从源码构建。
 
 侧栏 **Permissions（权限）** 可检查辅助功能、输入监控和后台项目注册状态，并直达对应系统设置。返回 Click 时自动刷新，也可点击 **Check Again（重新检查）**。
 
@@ -48,7 +48,7 @@ make dev
 make release
 ```
 
-`make release` 生成 `build/Click.app` 和当前构建机架构的 `build/Click-macOS-<arch>.zip`。设置 `SIGNING_IDENTITY` 可以使用自己的签名身份。以下命令用示例数据预览界面，不访问键盘：
+`make release` 生成 `build/Click.app`、当前架构的 `build/Click-macOS-<arch>.dmg` 和 ZIP。DMG 包含 Applications 快捷方式，文件、磁盘卷与应用使用同一图标。默认使用钥匙串中唯一的代码签名身份；没有身份或有多个身份时构建报错。可通过 `SIGNING_IDENTITY` 指定证书名称或指纹，只有明确设置 `SIGNING_IDENTITY=-` 才会临时签名。后续构建应保持同一证书；从旧临时签名切换到证书签名时，可能需要重新授权一次并重新注册键盘服务。以下命令用示例数据预览界面，不访问键盘：
 
 ```sh
 make demo

@@ -20,7 +20,7 @@ A small native macOS app for per-device key mappings and keyboard macros. Runs i
 
 Requires **macOS 14+**. The interface defaults to **English**. Switch between English and 简体中文 in **Settings → Language**; your choice is remembered.
 
-Download an architecture-matching app from [Releases](https://github.com/MrCroxx/click/releases), unzip it, and move **Click.app** to Applications before granting permissions or enabling launch at login. Builds are ad-hoc signed, not notarized; building from source is also supported.
+Download an architecture-matching app from [Releases](https://github.com/MrCroxx/click/releases), open the DMG (or unzip the ZIP), and move **Click.app** to Applications before granting permissions or enabling launch at login. Local builds use a stable Keychain signing identity. CI artifacts explicitly use ad-hoc signing; neither is notarized. Building from source is also supported.
 
 Use **Permissions** in the sidebar to check Accessibility, Input Monitoring and background-item registration, and open their System Settings pages. Status refreshes when you return to Click; **Check Again** refreshes it manually.
 
@@ -48,7 +48,7 @@ make dev
 make release
 ```
 
-`make release` creates `build/Click.app` and `build/Click-macOS-<arch>.zip` for the build machine's architecture. Set `SIGNING_IDENTITY` to use your own signing identity. For an isolated UI preview with sample data and no keyboard access:
+`make release` creates `build/Click.app`, `build/Click-macOS-<arch>.dmg` and a ZIP for the build machine's architecture. The DMG includes an Applications shortcut and matching app, file and volume icons. By default, builds use the single code-signing identity in Keychain and fail if none or multiple exist. Set `SIGNING_IDENTITY` to select a certificate name or fingerprint; only explicit `SIGNING_IDENTITY=-` permits ad-hoc signing. Keep the same certificate across builds. Moving from an ad-hoc build to a certificate-signed build may require one-time permission approval and Keyboard Service re-registration. For an isolated UI preview with sample data and no keyboard access:
 
 ```sh
 make demo

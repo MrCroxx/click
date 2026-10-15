@@ -23,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let other = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.mrcroxx.click")
             .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
         if let other, !demo { other.activate(); NSApp.terminate(nil); return }
+        if let iconURL = Bundle.main.url(forResource: "Click", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApp.applicationIconImage = icon
+        }
         model = AppModel(demo: demo)
         installMenu()
         NSApp.setActivationPolicy(.accessory)
