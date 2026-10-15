@@ -4,6 +4,7 @@ import Security
 import ClickCore
 import ClickIPC
 import VirtualHID
+import MachO
 
 func consoleUID() -> uid_t? {
     var uid: uid_t = 0
@@ -68,7 +69,13 @@ final class Listener: NSObject, NSXPCListenerDelegate {
         // Capture the enclosing, signed application's designated requirement once.
         // Ad-hoc builds bind to its exact code hash; Developer ID builds bind to
         // the app identifier and signing team. Unsigned/bare daemon runs are denied.
-        let app = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+        // launchd supplies a bundle-relative argv[0]. Resolve the actual loaded
+        // executable instead of interpreting that argument relative to `/`.
+        var size: UInt32 = 0
+        _ = _NSGetExecutablePath(nil, &size)
+        var path = [CChar](repeating: 0, count: Int(size))
+        let resolved = _NSGetExecutablePath(&path, &size) == 0
+        let app = URL(fileURLWithPath: resolved ? String(cString: path) : "/").resolvingSymlinksInPath()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         var code: SecStaticCode?
         var expected: SecRequirement?

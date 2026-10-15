@@ -57,8 +57,10 @@ final class Grabber {
         return router.configuration.profiles.contains(where: { $0.enabled && !$0.bindings.isEmpty && $0.device.matches(identity) }) ? identity : nil
     }
     private func inputElements(_ device: IOHIDDevice) -> [IOHIDElement] {
-        (IOHIDDeviceCopyMatchingElements(device, nil, 0) as? [IOHIDElement] ?? []).filter {
-            [kIOHIDElementTypeInput_Misc, kIOHIDElementTypeInput_Button, kIOHIDElementTypeInput_Axis, kIOHIDElementTypeInput_ScanCodes].contains(IOHIDElementGetType($0))
+        let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? 0
+        return (IOHIDDeviceCopyMatchingElements(device, nil, 0) as? [IOHIDElement] ?? []).filter {
+            [kIOHIDElementTypeInput_Misc, kIOHIDElementTypeInput_Button, kIOHIDElementTypeInput_Axis, kIOHIDElementTypeInput_ScanCodes].contains(IOHIDElementGetType($0)) &&
+            HIDInterfacePolicy.isKeyValue(vendor: vendor, page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0), reportSize: IOHIDElementGetReportSize($0))
         }
     }
     private func reconcile() throws {

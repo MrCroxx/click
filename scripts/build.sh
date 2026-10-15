@@ -37,6 +37,7 @@ swift scripts/icon.swift build/Click.iconset
 iconutil -c icns build/Click.iconset -o "$app/Contents/Resources/Click.icns"
 codesign --force --sign "$signing_identity" "$app"
 codesign --verify --deep --strict "$app"
+python3 scripts/verify_service.py "$app"
 # Invalidate Finder icon caches when replacing a bundle in place.
 touch "$app"
 if [[ "${1:-}" == "--zip" ]]; then

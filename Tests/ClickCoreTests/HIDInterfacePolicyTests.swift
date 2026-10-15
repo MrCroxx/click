@@ -3,6 +3,16 @@ import XCTest
 
 final class HIDInterfacePolicyTests: XCTestCase {
     let keyboard = DeviceIdentity(vendor: 1, product: 2, location: 3)
+    func testAppleOpaqueReportAndArrayContainersAreNotKeys() {
+        XCTAssertFalse(HIDInterfacePolicy.isKeyValue(vendor: 0x05ac, page: 0xff00, usage: 6, reportSize: 512))
+        XCTAssertFalse(HIDInterfacePolicy.isKeyValue(vendor: 1, page: 7, usage: UInt32.max, reportSize: 48))
+        XCTAssertFalse(HIDInterfacePolicy.isKeyValue(vendor: 1, page: 7, usage: 0, reportSize: 1))
+        XCTAssertTrue(HIDInterfacePolicy.isKeyValue(vendor: 0x05ac, page: 0xff, usage: 3, reportSize: 1))
+        // Unknown vendor data and mouse axes must still reach compatibility
+        // validation; they cannot be silently discarded to allow seizure.
+        XCTAssertTrue(HIDInterfacePolicy.isKeyValue(vendor: 1, page: 0xff00, usage: 6, reportSize: 512))
+        XCTAssertTrue(HIDInterfacePolicy.isKeyValue(vendor: 0x05ac, page: 1, usage: 0x30, reportSize: 16))
+    }
     func testCompoundSiblingDoesNotBlockKeyboardInEitherOrder() throws {
         let pure = HIDInterfacePolicy.Interface(id: 1, identity: keyboard, supported: true)
         let compound = HIDInterfacePolicy.Interface(id: 2, identity: keyboard, supported: false)
