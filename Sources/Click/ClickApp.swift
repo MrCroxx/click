@@ -2,9 +2,14 @@ import AppKit
 import SwiftUI
 
 @main
-struct ClickApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    var body: some Scene { Settings { EmptyView() } }
+enum ClickApp {
+    @MainActor
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = AppDelegate()
+        application.delegate = delegate
+        withExtendedLifetime(delegate) { application.run() }
+    }
 }
 
 @MainActor
@@ -17,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let other = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.mrcroxx.click")
             .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
         if let other, !demo { other.activate(); NSApp.terminate(nil); return }
+        installMenu()
         model = AppModel(demo: demo)
         NSApp.setActivationPolicy(.accessory)
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -32,6 +38,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let launchedAtLogin = event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         if !launchedAtLogin && !CommandLine.arguments.contains("--background") { showWindow() }
     }
+    private func installMenu() {
+        let bar = NSMenu()
+        let appItem = NSMenuItem(); bar.addItem(appItem)
+        let appMenu = NSMenu(); appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "打开 Click", action: #selector(showWindow), keyEquivalent: ",").target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "退出 Click", action: #selector(quit), keyEquivalent: "q").target = self
+        let editItem = NSMenuItem(); bar.addItem(editItem)
+        let edit = NSMenu(title: "编辑"); editItem.submenu = edit
+        for (title, action, key) in [("撤销", "undo:", "z"), ("剪切", "cut:", "x"), ("复制", "copy:", "c"), ("粘贴", "paste:", "v"), ("全选", "selectAll:", "a")] {
+            edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
+        }
+        NSApp.mainMenu = bar
+    }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     @objc func showWindow() {
         if window == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
