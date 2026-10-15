@@ -213,7 +213,9 @@
     "Editing & Whitespace": "Editing & Whitespace",
     "Navigation": "Navigation",
     "Function Keys": "Function Keys",
-    "Modifiers": "Modifiers"
+    "Modifiers": "Modifiers",
+    "If Click is missing, add this app with + in System Settings.": "If Click is missing, add this app with + in System Settings.",
+    "Show Click in Finder": "Show Click in Finder"
   },
   "zh-Hans": {
     "Mappings": "按键映射",
@@ -429,6 +431,8 @@
     "Editing & Whitespace": "编辑与空白",
     "Navigation": "导航键",
     "Function Keys": "功能键",
-    "Modifiers": "修饰键"
+    "Modifiers": "修饰键",
+    "If Click is missing, add this app with + in System Settings.": "如果列表中没有 Click，请在系统设置中用「＋」添加此应用。",
+    "Show Click in Finder": "在 Finder 中显示 Click"
   }
 }

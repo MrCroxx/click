@@ -23,8 +23,16 @@ struct PermissionsView: View {
                 Divider()
                 row("Input Monitoring", detail: "Checks Click’s access. Keyboard Service access is verified when capture starts.",
                     status: model.inputMonitoring ? "Granted" : "Not granted", ready: model.inputMonitoring) {
-                    if !model.inputMonitoring { model.requestInputMonitoring() }
+                    model.requestInputMonitoring()
                     model.openSettings("Privacy_ListenEvent")
+                }
+                if model.inputMonitoringRequested {
+                    HStack(alignment: .top) {
+                        Text(tr("If Click is missing, add this app with + in System Settings."))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button(tr("Show Click in Finder")) { model.revealApplication() }.disabled(model.demo)
+                    }.padding(.bottom, 12)
                 }
             }
             VStack(alignment: .leading, spacing: 8) {

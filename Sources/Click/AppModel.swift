@@ -3,6 +3,7 @@ import SwiftUI
 import ServiceManagement
 import ClickCore
 import ClickIPC
+import IOKit.hidsystem
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -13,7 +14,8 @@ final class AppModel: ObservableObject {
     @Published var error: String?
     @Published var loginStatus = SMAppService.mainApp.status
     @Published var accessibility = AXIsProcessTrusted()
-    @Published var inputMonitoring = CGPreflightListenEventAccess()
+    @Published var inputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+    @Published var inputMonitoringRequested = false
     @Published var selection = "devices"
     @Published var selectedProfile: UUID?
     @Published var selectedMacro: UUID?
@@ -89,7 +91,7 @@ final class AppModel: ObservableObject {
         }
     }
     func refresh() {
-        accessibility = AXIsProcessTrusted(); inputMonitoring = CGPreflightListenEventAccess()
+        accessibility = AXIsProcessTrusted(); inputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         loginStatus = SMAppService.mainApp.status
         driverInstaller.refresh()
         refreshDevices()
@@ -204,7 +206,16 @@ final class AppModel: ObservableObject {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
-    func requestInputMonitoring() { _ = CGRequestListenEventAccess() }
+    func requestInputMonitoring() {
+        guard !demo else { return }
+        inputMonitoringRequested = true
+        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        inputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+    }
+    func revealApplication() {
+        guard !demo else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+    }
     func openSettings(_ anchor: String) {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") { NSWorkspace.shared.open(url) }
     }
