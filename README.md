@@ -36,7 +36,7 @@ Input Monitoring uses the HID permission check and request. If Click is absent f
 6. Enable the device profile. Changes save automatically and apply immediately after a short debounce.
 7. Enable **Launch at login** if desired.
 
-Adding a device starts with mappings disabled. Changes persist before hardware application. If the service fails, configuration stays saved and mappings pause with an error. Only enabled profiles are applied. Pausing restores the previous mappings; resuming reapplies the current valid configuration. Closing the window keeps the service running. Quitting restores mappings and stops it.
+Adding a device starts with mappings disabled. Changes persist before hardware application. If the service fails, configuration stays saved and mappings pause with an error. Only enabled profiles are applied. Pausing restores the previous mappings; resuming reapplies the current valid configuration. If keys are held during startup, Click waits and retries automatically; pausing or changing the configuration cancels the pending attempt. Closing the window keeps the service running. Quitting restores mappings and stops it.
 
 ## Build
 
