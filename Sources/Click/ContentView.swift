@@ -320,13 +320,14 @@ struct ValueMenu<Content: View>: View {
     var body: some View {
         Menu(content: content) {
             HStack {
-                Text(title).lineLimit(1)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary)
-            }.padding(.horizontal, 9).padding(.vertical, 7)
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
-                .contentShape(Rectangle())
-        }.menuStyle(.borderlessButton).menuIndicator(.hidden)
+                Text(title).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+            }.padding(.horizontal, 10).frame(height: 30)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.10)))
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }.menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
     }
 }
 
