@@ -82,8 +82,13 @@ final class AppModel: ObservableObject {
         message = "预览模式 · 不接管键盘"
     }
     func refreshDevices() {
-        devices = hardware?.devices() ?? []
-        lastDeviceIDs = devices.map(\.id)
+        let services = hardware?.devices() ?? []
+        lastDeviceIDs = services.map(\.id)
+        devices = services.reduce(into: []) { result, device in
+            if !result.contains(where: { $0.identity.matches(device.identity) && device.identity.matches($0.identity) }) {
+                result.append(device)
+            }
+        }
     }
     func refresh() {
         accessibility = AXIsProcessTrusted(); inputMonitoring = CGPreflightListenEventAccess()

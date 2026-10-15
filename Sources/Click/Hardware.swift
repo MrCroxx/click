@@ -52,6 +52,7 @@ final class Hardware {
     private func saveJournal() throws {
         try FileManager.default.createDirectory(at: journalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(journal).write(to: journalURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: journalURL.path)
     }
     func restore() throws {
         let connected = devices()
