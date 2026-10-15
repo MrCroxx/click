@@ -68,7 +68,7 @@ New mappings use exclusive HID capture and virtual HID output, without modifying
 ## Current limits
 
 - The raw HID backend is under hardware validation. Local tests and packaging pass; physical input/IME ordering, permission approval, Secure Input, logout/login and disconnect recovery require testing on the target Mac. Existing v0.1.x downloads still use the older backend.
-- Mappings support keyboard-page keys and left/right modifiers. Fn/media remapping, mouse mappings, firmware programming and Caps Lock LED synchronization are not implemented. Supported extra keyboard input pages pass through; unsupported compound interfaces are refused.
+- Mappings support keyboard-page keys and left/right modifiers. Fn/media remapping, mouse mappings, firmware programming and Caps Lock LED synchronization are not implemented. Supported extra keyboard input pages pass through; unsupported compound interfaces remain with macOS while compatible sibling interfaces can be captured. Devices with no compatible interface are refused.
 - Triggers are single physical keys, scoped to their device. There are **no reserved F13–F20 channels and no eight-trigger limit**. Modifier keys cannot trigger macros.
 - Physical capture and shortcut output use HID before the normal input-method path. Explicit Unicode text insertion remains a separate user-session action and may be rejected by Secure Input or individual apps.
 - A single macro runs at a time. Overlapping triggers are ignored. Application activation has a five-second deadline; an unexpected focus change stops following actions. An already-requested app launch cannot be undone.

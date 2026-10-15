@@ -1,0 +1,28 @@
+import XCTest
+@testable import ClickCore
+
+final class HIDInterfacePolicyTests: XCTestCase {
+    let keyboard = DeviceIdentity(vendor: 1, product: 2, location: 3)
+    func testCompoundSiblingDoesNotBlockKeyboardInEitherOrder() throws {
+        let pure = HIDInterfacePolicy.Interface(id: 1, identity: keyboard, supported: true)
+        let compound = HIDInterfacePolicy.Interface(id: 2, identity: keyboard, supported: false)
+        XCTAssertEqual(try HIDInterfacePolicy.select([pure, compound]), [1])
+        XCTAssertEqual(try HIDInterfacePolicy.select([compound, pure]), [1])
+    }
+    func testUnsupportedDeviceIsNotHiddenByAnUnrelatedKeyboard() {
+        let other = DeviceIdentity(vendor: 1, product: 2, location: 4)
+        XCTAssertThrowsError(try HIDInterfacePolicy.select([
+            .init(id: 1, identity: keyboard, supported: false),
+            .init(id: 2, identity: other, supported: true)
+        ]))
+    }
+    func testOnlyUnsupportedInterfaceFails() {
+        XCTAssertThrowsError(try HIDInterfacePolicy.select([.init(id: 1, identity: keyboard, supported: false)]))
+    }
+    func testPointerInputsAreNotPartiallyCaptured() {
+        XCTAssertTrue(HIDInterfacePolicy.supports([.init(page: 7, usage: 4), .init(page: 7, usage: UInt32.max)]))
+        XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 7, usage: 4), .init(page: 9, usage: 1)]))
+        XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 7, usage: 4), .init(page: 1, usage: 0x30)]))
+        XCTAssertFalse(HIDInterfacePolicy.supports([]))
+    }
+}

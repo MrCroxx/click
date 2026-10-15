@@ -17,7 +17,7 @@ final class Grabber {
     var onTrigger: (UUID) -> Void = { _ in }
     var onFailure: (String) -> Void = { _ in }
     private(set) var running = false
-    private let pages: [UInt32] = [7, 12, 1, 0xff01, 0x00ff]
+    private let pages = HIDInterfacePolicy.pages
 
     func start(_ configuration: Configuration) throws {
         stop()
@@ -29,7 +29,7 @@ final class Grabber {
             guard let context else { return }
             let owner = Unmanaged<Grabber>.fromOpaque(context).takeUnretainedValue()
             guard owner.running else { return }
-            do { try owner.add(device) } catch { owner.fail(error.localizedDescription) }
+            do { try owner.reconcile() } catch { owner.fail(error.localizedDescription) }
         }, context)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, { context, _, _, device in
             guard let context else { return }
@@ -40,34 +40,45 @@ final class Grabber {
         // separately with SeizeDevice, after the virtual keyboard is ready.
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
         running = true
-        if let connected = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> {
-            do { for device in connected { try add(device) } }
-            catch { stop(); throw error }
-        }
+        do { try reconcile() }
+        catch { stop(); throw error }
     }
     private func registryID(_ device: IOHIDDevice) -> UInt64 {
         var id: UInt64 = 0
         IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(device), &id)
         return id
     }
-    private func add(_ device: IOHIDDevice) throws {
-        let id = registryID(device)
-        guard devices[id] == nil else { return }
+    private func identity(_ device: IOHIDDevice) -> DeviceIdentity? {
         func number(_ key: String) -> Int { (IOHIDDeviceGetProperty(device, key as CFString) as? NSNumber)?.intValue ?? 0 }
         func string(_ key: String) -> String { IOHIDDeviceGetProperty(device, key as CFString) as? String ?? "" }
-        // Never feed a virtual keyboard back into itself, including other pqrs clients.
         guard !(number(kIOHIDVendorIDKey) == 0x16c0 && number(kIOHIDProductIDKey) == 0x27db),
-              !string(kIOHIDProductKey).localizedCaseInsensitiveContains("virtual") else { return }
+              !string(kIOHIDProductKey).localizedCaseInsensitiveContains("virtual") else { return nil }
         let identity = DeviceIdentity(vendor: number(kIOHIDVendorIDKey), product: number(kIOHIDProductIDKey), serial: string(kIOHIDSerialNumberKey), location: number(kIOHIDLocationIDKey))
-        guard router.configuration.profiles.contains(where: { $0.enabled && !$0.bindings.isEmpty && $0.device.matches(identity) }) else { return }
-        let elements = (IOHIDDeviceCopyMatchingElements(device, nil, 0) as? [IOHIDElement] ?? []).filter {
+        return router.configuration.profiles.contains(where: { $0.enabled && !$0.bindings.isEmpty && $0.device.matches(identity) }) ? identity : nil
+    }
+    private func inputElements(_ device: IOHIDDevice) -> [IOHIDElement] {
+        (IOHIDDeviceCopyMatchingElements(device, nil, 0) as? [IOHIDElement] ?? []).filter {
             [kIOHIDElementTypeInput_Misc, kIOHIDElementTypeInput_Button, kIOHIDElementTypeInput_Axis, kIOHIDElementTypeInput_ScanCodes].contains(IOHIDElementGetType($0))
         }
-        // Do not seize compound pointer/keyboard interfaces whose input we cannot forward.
-        guard !elements.isEmpty, elements.allSatisfy({
-            let page = IOHIDElementGetUsagePage($0), usage = IOHIDElementGetUsage($0)
-            return pages.contains(page) && (page != 1 || (0x81...0x93).contains(usage))
-        }) else { throw ClickError("This keyboard interface contains unsupported HID inputs. It was not captured.") }
+    }
+    private func reconcile() throws {
+        let connected = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? []
+        let candidates = connected.compactMap { device -> (IOHIDDevice, DeviceIdentity, [IOHIDElement])? in
+            guard let identity = identity(device) else { return nil }
+            return (device, identity, inputElements(device))
+        }
+        let selected = try HIDInterfacePolicy.select(candidates.map { device, identity, elements in
+            .init(id: registryID(device), identity: identity, supported: HIDInterfacePolicy.supports(elements.map {
+                .init(page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0))
+            }))
+        })
+        for (device, identity, elements) in candidates where selected.contains(registryID(device)) {
+            try add(device, identity: identity, elements: elements)
+        }
+    }
+    private func add(_ device: IOHIDDevice, identity: DeviceIdentity, elements: [IOHIDElement]) throws {
+        let id = registryID(device)
+        guard devices[id] == nil else { return }
         guard IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) == kIOReturnSuccess else {
             throw ClickError("Unable to capture the keyboard. Check Input Monitoring and competing keyboard tools.")
         }

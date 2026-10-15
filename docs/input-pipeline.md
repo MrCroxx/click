@@ -54,8 +54,12 @@ Key state is merged into complete reports, with a 32-key-per-page limit. Exceedi
 that limit or a HID rollover error stops capture rather than dropping a key.
 Disconnect removes that device's held keys. Pending values across devices are
 ordered by their HID timestamps. Virtual keyboards are excluded from capture.
-Compound interfaces with unsupported input pages/axes are refused in full rather
-than partially swallowed. Keyboard-page mappings are supported; consumer,
+Compound interfaces with unsupported input pages/axes remain with macOS rather
+than being partially swallowed. A compatible sibling interface on the same
+physical keyboard can still be captured. A connected configured keyboard with
+no compatible interface fails explicitly. This selection is tested against the
+pure-keyboard plus compound-interface topology observed in read-only inspection
+of a NuPhy Halo65 V2; actual event delivery and reconnection remain unverified. Keyboard-page mappings are supported; consumer,
 system, and Apple vendor pages pass through on supported keyboard interfaces.
 Caps Lock LED synchronization is not implemented yet.
 
