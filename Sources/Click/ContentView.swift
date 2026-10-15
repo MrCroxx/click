@@ -52,22 +52,22 @@ struct ContentView: View {
                 Text("Click").font(.system(size: 17, weight: .semibold))
             }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 27)
             navigation("devices", "Mappings", "keyboard")
-            navigation("macros", "Macros", "list.bullet.rectangle")
-            Divider().padding(.horizontal, 20).padding(.vertical, 18)
             if model.selection == "devices" {
                 HStack {
                     Text(tr("Devices")).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                     Spacer()
                     deviceMenu.labelStyle(.iconOnly)
-                }.padding(.horizontal, 20).padding(.bottom, 10)
+                }.padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 10)
                 ScrollView {
                     VStack(spacing: 3) {
                         ForEach(model.configuration.profiles) { profile in
                             item(profile.name, selected: model.selectedProfile == profile.id) { model.selectedProfile = profile.id }
                         }
-                    }.padding(.horizontal, 10)
-                }
-            } else { Spacer() }
+                    }.padding(.leading, 20).padding(.trailing, 10)
+                }.frame(maxHeight: min(CGFloat(model.configuration.profiles.count) * 60, 240))
+            }
+            Divider().padding(.horizontal, 20).padding(.vertical, 14)
+            navigation("macros", "Macros", "list.bullet.rectangle")
             Spacer(minLength: 12)
             navigation("permissions", "Permissions", "lock.shield")
             navigation("settings", "Settings", "gearshape")
