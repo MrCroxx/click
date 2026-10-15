@@ -25,7 +25,9 @@ public enum KeyCatalog {
         for (i, code) in functions.enumerated() { result.append(Key(id: i < 12 ? i+58 : i+92, name: "F\(i+1)", virtual: code)) }
         return result
     }()
-    public static func name(_ usage: Int) -> String { keys.first { $0.id == usage }?.name ?? "Unknown" }
+    public static let fnOutputID = 0x00ff0003
+    public static var outputKeys: [Key] { keys + [Key(id: fnOutputID, name: "Fn", virtual: 63)] }
+    public static func name(_ usage: Int) -> String { outputKeys.first { $0.id == usage }?.name ?? "Unknown" }
     public static func virtual(_ usage: Int) -> UInt16? { keys.first { $0.id == usage }?.virtual }
     public static func isModifier(_ usage: Int) -> Bool { (224...231).contains(usage) || usage == 57 }
 }

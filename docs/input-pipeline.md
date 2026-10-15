@@ -61,6 +61,12 @@ no compatible interface fails explicitly. This selection is tested against the
 pure-keyboard plus compound-interface topology observed in read-only inspection
 of a NuPhy Halo65 V2; actual event delivery and reconnection remain unverified. Keyboard-page mappings are supported; consumer,
 system, and Apple vendor pages pass through on supported keyboard interfaces.
+Mappings can output held Fn on Apple top-case page `0x00ff`, usage `3`, or add
+Fn to a keyboard-page destination. Fn reports are posted before keyboard reports,
+so the modifier is present when a function-key down reaches macOS. Held Fn is
+owned per source, including overlapping sources, and released on disconnect.
+`destinationPage` and `fn` are optional configuration fields; missing fields keep
+legacy keyboard-page behavior. These mappings do not use macro taps or CGEvent.
 Caps Lock LED synchronization is not implemented yet.
 
 A normal stop emits empty reports and closes physical devices. On abrupt process
@@ -95,3 +101,19 @@ Before treating this backend as hardware-validated, exercise these on a test Mac
    behaves like the raw HID key path. Verify login startup after a real login.
 
 Source/build tests do not certify those hardware, permission, or session scenarios.
+
+## Migration notes
+
+Karabiner's per-device identifiers are not necessarily global wildcards when a
+vendor/product pair is missing. Verify the corresponding device in its Settings
+UI and resolve Click's identity from connected hardware. Back up the source and
+save imported profiles disabled until takeover is authorized. Personal backups
+and exports belong outside this repository.
+
+Karabiner's F1 → F1 function-key setting is not merely a raw no-op through a
+virtual Apple keyboard: macOS may interpret a bare F-key as a media key. Preserve
+standard function-key intent with a held Fn + F-key mapping, following
+[Karabiner's function-key documentation](https://karabiner-elements.pqrs.org/docs/help/how-to/function-keys/).
+Physical Fn/Globe and function-key behavior still require hardware validation.
+Stopping Karabiner-Elements must not remove the shared DriverKit virtual HID
+driver and its service, which Click also needs.

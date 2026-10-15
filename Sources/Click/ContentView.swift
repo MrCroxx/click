@@ -277,7 +277,13 @@ struct DeviceEditor: View {
                             Button(tr("Key")) { binding.kind = .key }
                             Button(tr("Macro")) { binding.kind = .macro; if binding.macroID == nil { binding.macroID = macros.first?.id } }
                         }.frame(width: 100)
-                        if binding.kind == .key { KeyPicker(selection: $binding.destination).frame(maxWidth: .infinity) }
+                        if binding.kind == .key {
+                            KeyPicker(selection: $binding.destinationSelection, allowsFn: true).frame(maxWidth: .infinity)
+                            if (binding.destinationPage ?? 7) == 7 {
+                                Toggle("Fn", isOn: Binding(get: { binding.fn ?? false }, set: { binding.fn = $0 ? true : nil }))
+                                    .toggleStyle(.checkbox).fixedSize()
+                            }
+                        }
                         else {
                             ValueMenu(title: macros.first(where: { $0.id == binding.macroID })?.name ?? tr("Choose a macro")) {
                                 ForEach(macros) { macro in Button(macro.name) { binding.macroID = macro.id } }
@@ -320,9 +326,10 @@ struct ValueMenu<Content: View>: View {
 
 struct KeyPicker: View {
     @Binding var selection: Int
+    var allowsFn = false
     var body: some View {
         ValueMenu(title: tr(KeyCatalog.name(selection))) {
-            ForEach(KeyCatalog.keys) { key in Button(tr(key.name)) { selection = key.id } }
+            ForEach(allowsFn ? KeyCatalog.outputKeys : KeyCatalog.keys) { key in Button(tr(key.name)) { selection = key.id } }
         }.accessibilityLabel(tr("Key") + ": " + tr(KeyCatalog.name(selection)))
     }
 }

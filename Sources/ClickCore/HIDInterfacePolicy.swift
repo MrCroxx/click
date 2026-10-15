@@ -3,7 +3,7 @@ import Foundation
 /// A physical keyboard may expose several independent HID interfaces. Only
 /// interfaces whose entire input can be forwarded are eligible for seizure.
 public enum HIDInterfacePolicy {
-    public static let pages: [UInt32] = [7, 12, 1, 0xff01, 0x00ff]
+    public static let pages: [UInt32] = [0x00ff, 0xff01, 7, 12, 1]
     public struct Input {
         public let page: UInt32
         public let usage: UInt32

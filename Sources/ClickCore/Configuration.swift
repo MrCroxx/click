@@ -63,6 +63,15 @@ public struct KeyBinding: Codable, Equatable, Identifiable, Sendable {
     public var source: Int = 57
     public var kind: BindingKind = .key
     public var destination: Int = 41
+    public var destinationPage: UInt32?
+    public var fn: Bool?
+    public var destinationSelection: Int {
+        get { destinationPage == 0x00ff ? KeyCatalog.fnOutputID : destination }
+        set {
+            if newValue == KeyCatalog.fnOutputID { destinationPage = 0x00ff; destination = 3; fn = nil }
+            else { destinationPage = nil; destination = newValue }
+        }
+    }
     public var macroID: UUID?
     public init() {}
 }
@@ -94,7 +103,9 @@ public struct Configuration: Codable, Equatable, Sendable {
                 guard KeyCatalog.keys.contains(where: { $0.id == binding.source }) else { throw ClickError("Invalid source key.") }
                 switch binding.kind {
                 case .key:
-                    guard KeyCatalog.keys.contains(where: { $0.id == binding.destination }) else { throw ClickError("Invalid destination key.") }
+                    let keyboardKey = (binding.destinationPage ?? 7) == 7 && KeyCatalog.keys.contains(where: { $0.id == binding.destination })
+                    let fnKey = binding.destinationPage == 0x00ff && binding.destination == 3 && binding.fn != true
+                    guard keyboardKey || fnKey else { throw ClickError("Invalid destination key.") }
                 case .macro:
                     guard macros.contains(where: { $0.id == binding.macroID }) else { throw ClickError("The assigned macro no longer exists.") }
                     guard !KeyCatalog.isModifier(binding.source) else { throw ClickError("Modifier keys cannot trigger macros.") }
