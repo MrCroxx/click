@@ -7,7 +7,9 @@ import IOKit.hidsystem
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var configuration = Configuration()
+    @Published var configuration = Configuration() {
+        didSet { if readyForEdits { updater.submit(configuration) } }
+    }
     @Published var devices: [ConnectedDevice] = []
     @Published var running = false
     @Published var message = "Ready"
@@ -33,7 +35,32 @@ final class AppModel: ObservableObject {
     private var timer: Timer?
     private var active = Configuration()
     private var loadFailed = false
-    var dirty: Bool { configuration != active }
+    private var readyForEdits = false
+    private lazy var updater: ConfigurationUpdater = {
+        let updater = ConfigurationUpdater(persist: { [weak self] draft in
+            guard let self else { return }
+            guard !self.loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
+            if !self.demo { try self.store.save(draft) }
+        }, apply: { [weak self] draft in
+            guard let self else { return }
+            self.active = draft
+            try await self.start()
+        }, stop: { [weak self] in
+            guard let self, !self.demo else { return }
+            try self.pauseThrowing()
+        })
+        updater.onState = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .saved: self.applying = true; self.error = nil; self.message = "Applying changes…"
+            case .applying: self.applying = true
+            case .applied: self.applying = false; self.error = nil; self.message = self.demo ? "Preview" : "Ready"
+            case .saveFailed(let detail): self.applying = false; self.message = "Changes not saved"; self.error = detail
+            case .applyFailed(let detail): self.applying = false; self.message = "Saved. Mappings paused."; self.error = detail
+            }
+        }
+        return updater
+    }()
     init(demo: Bool = false) {
         self.demo = demo
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Click")
@@ -48,8 +75,8 @@ final class AppModel: ObservableObject {
         daemon.onFailure = { [weak self] message in
             self?.pause(); self?.error = message
         }
-        driverInstaller.prepareChange = { [weak self] in try self?.pauseThrowing() }
-        if demo { seedDemo(); return }
+        driverInstaller.prepareChange = { [weak self] in self?.updater.cancel(); try self?.pauseThrowing() }
+        if demo { seedDemo(); readyForEdits = true; return }
         driverInstaller.refresh()
         do {
             hardware = try Hardware(directory: directory)
@@ -57,9 +84,8 @@ final class AppModel: ObservableObject {
             configuration = try store.load(); active = configuration
             refreshDevices()
         } catch { self.error = error.localizedDescription; loadFailed = true }
-        if !loadFailed && configuration.profiles.contains(where: \.enabled) {
-            Task { do { try await start() } catch { self.error = error.localizedDescription } }
-        }
+        readyForEdits = true
+        if !loadFailed && configuration.profiles.contains(where: \.enabled) { updater.submit(configuration) }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -104,32 +130,9 @@ final class AppModel: ObservableObject {
         configuration.profiles.append(profile); selectedProfile = profile.id
     }
     func connected(_ profile: DeviceProfile) -> Bool { demo || devices.contains { profile.device.matches($0.identity) } }
-    func save() {
-        guard !applying else { return }
-        let draft = configuration
-        applying = true
-        Task {
-            defer { applying = false }
-            do {
-                try draft.validate()
-                if demo { active = draft; message = "Preview updated"; return }
-                guard !loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
-                try pauseThrowing()
-                let previous = active
-                active = draft
-                do {
-                    try await start()
-                    try store.save(draft)
-                } catch {
-                    try? pauseThrowing(); active = previous
-                    throw error
-                }
-                message = "Saved"; error = nil
-            } catch { self.error = error.localizedDescription }
-        }
-    }
     func start() async throws {
         guard !demo else { return }
+        guard !loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
         guard hardware != nil else { throw ClickError("Device service unavailable. Restart Click.") }
         try active.validate()
         guard active.profiles.contains(where: { $0.enabled && !$0.bindings.isEmpty }) else {
@@ -145,14 +148,7 @@ final class AppModel: ObservableObject {
     }
     func toggleRunning() {
         if running || applying { pause() }
-        else {
-            applying = true
-            Task {
-                defer { applying = false }
-                do { try await start(); message = "Service started"; error = nil }
-                catch { self.error = error.localizedDescription }
-            }
-        }
+        else { updater.submit(configuration) }
     }
     func setService(_ enabled: Bool) {
         guard !demo else { return }
@@ -161,6 +157,7 @@ final class AppModel: ObservableObject {
             if enabled { try service.register() }
             else { pause(); try service.unregister() }
             serviceStatus = service.status; error = nil
+            if enabled && serviceStatus == .enabled { updater.submit(configuration) }
             if serviceStatus == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
         } catch { self.error = error.localizedDescription }
     }
@@ -172,10 +169,13 @@ final class AppModel: ObservableObject {
         try hardware?.restore()
     }
     func pause() {
+        updater.cancel()
+        applying = false
         do { try pauseThrowing(); message = "Paused. Original mappings restored." }
         catch { self.error = error.localizedDescription }
     }
     func shutdown() -> Bool {
+        updater.cancel()
         do { try pauseThrowing(); return true }
         catch { self.error = error.localizedDescription; return false }
     }
@@ -185,7 +185,7 @@ final class AppModel: ObservableObject {
         do {
             let imported = try Configuration.decode(Data(contentsOf: url))
             configuration = imported; selectedProfile = imported.profiles.first?.id; selectedMacro = imported.macros.first?.id
-            message = "Configuration imported. Save to apply."; error = nil
+            // Configuration assignment above persists and schedules application.
         } catch { self.error = error.localizedDescription }
     }
     func exportConfiguration() {

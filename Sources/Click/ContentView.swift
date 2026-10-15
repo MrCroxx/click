@@ -124,8 +124,6 @@ struct ContentView: View {
             Text(tr(model.selection == "macros" ? "Macros" : model.selection == "settings" ? "Settings" : model.selection == "permissions" ? "Permissions" : "Mappings"))
                 .font(.system(size: 13, weight: .medium))
             Spacer()
-            if model.dirty { Circle().fill(.orange.opacity(0.8)).frame(width: 5, height: 5).help(tr("Unsaved changes")) }
-            Button(tr("Save")) { model.save() }.keyboardShortcut("s").disabled(!model.dirty).controlSize(.regular)
             Menu {
                 Button(tr("Import…")) { model.importConfiguration() }
                 Button(tr("Export…")) { model.exportConfiguration() }

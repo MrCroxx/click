@@ -215,7 +215,11 @@
     "Function Keys": "Function Keys",
     "Modifiers": "Modifiers",
     "If Click is missing, add this app with + in System Settings.": "If Click is missing, add this app with + in System Settings.",
-    "Show Click in Finder": "Show Click in Finder"
+    "Show Click in Finder": "Show Click in Finder",
+    "Applying changes…": "Applying changes…",
+    "Changes not saved": "Changes not saved",
+    "Saved. Mappings paused.": "Saved. Mappings paused.",
+    "Keyboard Service did not respond. Turn it off and on in Settings, then retry.": "Keyboard Service did not respond. Turn it off and on in Settings, then retry."
   },
   "zh-Hans": {
     "Mappings": "按键映射",
@@ -433,6 +437,10 @@
     "Function Keys": "功能键",
     "Modifiers": "修饰键",
     "If Click is missing, add this app with + in System Settings.": "如果列表中没有 Click，请在系统设置中用「＋」添加此应用。",
-    "Show Click in Finder": "在 Finder 中显示 Click"
+    "Show Click in Finder": "在 Finder 中显示 Click",
+    "Applying changes…": "正在应用更改…",
+    "Changes not saved": "更改未保存",
+    "Saved. Mappings paused.": "已保存，映射已暂停。",
+    "Keyboard Service did not respond. Turn it off and on in Settings, then retry.": "键盘服务未响应。请在设置中关闭并重新打开键盘服务，然后重试。"
   }
 }

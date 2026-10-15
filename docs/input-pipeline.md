@@ -145,3 +145,21 @@ Without that fixture the live-package verification test is skipped; rejection,
 version compatibility, signature rejection and other tests still run. Fresh
 installation, activation approval, reboot and service takeover require separate
 manual validation.
+
+## Automatic configuration updates
+
+Valid edits are persisted atomically before hardware application. A serialized
+250 ms debounce coalesces consecutive edits; newer edits invalidate in-flight
+application and only the latest configuration is applied next. Pause and quit
+cancel queued application. A failed save never applies unsaved input rules;
+a failed hardware application leaves the saved configuration intact and reports
+that mappings are paused. Invalid intermediate edits remain in the editor with
+an error until corrected. Demo updates remain in memory.
+
+Configuration XPC replies have a six-second deadline and exactly-once completion.
+A timeout invalidates the connection and reports how to re-register Keyboard
+Service via its Settings toggle. This also prevents a stale launchd registration
+from indefinitely blocking subsequent configuration edits. Registration status
+alone does not establish that launchd can execute the daemon; after replacing an
+ad-hoc signed build, a stale service registration may need to be turned off and
+on again. No TCC database or launchd security checks are bypassed.

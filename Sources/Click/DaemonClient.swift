@@ -15,14 +15,19 @@ import ClickIPC
         value.remoteObjectInterface = NSXPCInterface(with: ClickDaemonProtocol.self)
         value.exportedInterface = NSXPCInterface(with: ClickAgentProtocol.self)
         value.exportedObject = self
-        value.invalidationHandler = { [weak self] in
+        value.invalidationHandler = { [weak self, weak value] in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, let value, self.connection === value else { return }
                 self.connection = nil
                 if self.active { self.failed("Keyboard service disconnected. Mappings paused.") }
             }
         }
-        value.interruptionHandler = { [weak self] in self?.failed("Keyboard service disconnected. Mappings paused.") }
+        value.interruptionHandler = { [weak self, weak value] in
+            DispatchQueue.main.async {
+                guard let self, let value, self.connection === value else { return }
+                self.failed("Keyboard service disconnected. Mappings paused.")
+            }
+        }
         value.resume(); connection = value
         return value
     }
@@ -30,12 +35,20 @@ import ClickIPC
         let token = UUID(); generation = token
         let data = try configuration.encoded()
         let connection = connect()
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let proxy = connection.remoteObjectProxyWithErrorHandler { continuation.resume(throwing: $0) } as! ClickDaemonProtocol
-            proxy.configure(data) { message in
-                if let message { continuation.resume(throwing: ClickError(message)) }
-                else { continuation.resume() }
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let reply = ServiceReply { continuation.resume(with: $0) }
+                let proxy = connection.remoteObjectProxyWithErrorHandler { reply.finish(.failure($0)) } as! ClickDaemonProtocol
+                proxy.configure(data) { message in
+                    if let message { reply.finish(.failure(ClickError(message))) }
+                    else { reply.finish(.success(())) }
+                }
             }
+        } catch {
+            stop()
+            connection.invalidate()
+            if self.connection === connection { self.connection = nil }
+            throw error
         }
         guard generation == token else { stop(); throw CancellationError() }
         active = true
