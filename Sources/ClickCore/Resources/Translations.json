@@ -2,6 +2,7 @@
   "en": {
     "Mappings": "Mappings",
     "Macros": "Macros",
+    "All Macros": "All Macros",
     "Settings": "Settings",
     "Devices": "Devices",
     "Add Device": "Add Device",
@@ -227,6 +228,7 @@
   "zh-Hans": {
     "Mappings": "按键映射",
     "Macros": "宏",
+    "All Macros": "全部宏",
     "Settings": "设置",
     "Devices": "设备",
     "Add Device": "添加设备",
