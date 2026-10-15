@@ -184,38 +184,45 @@ struct ContentView: View {
         }.onAppear { if model.selectedMacro == nil { model.selectedMacro = model.configuration.macros.first?.id } }
     }
     private var settings: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 28) {
             Text(tr("Settings")).font(.system(size: 24, weight: .semibold))
-            settingsSection("General") {
+            settingsSection("Appearance") {
                 settingsRow("Language") {
                     Picker(tr("Language"), selection: $language) {
                         ForEach(AppLanguage.allCases) { Text($0.name).tag($0.rawValue) }
                     }.labelsHidden().frame(width: 170)
                 }
-                Divider()
+            }
+            settingsSection("Startup") {
                 settingsRow("Launch at login") {
+                    if model.loginStatus == .requiresApproval {
+                        Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() }.disabled(model.demo)
+                    }
                     Toggle(tr("Launch at login"), isOn: Binding(get: { model.loginStatus == .enabled || model.loginStatus == .requiresApproval }, set: { model.setLogin($0) }))
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(model.demo)
                 }
-                if model.loginStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
             }
-            settingsSection("Input") {
-                DriverSettings(installer: model.driverInstaller, demo: model.demo)
-                Divider()
+            settingsSection("Keyboard") {
                 settingsRow("Keyboard Service") {
+                    if model.serviceStatus == .requiresApproval {
+                        Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() }.disabled(model.demo)
+                    }
                     Toggle(tr("Keyboard Service"), isOn: Binding(get: { model.serviceStatus == .enabled || model.serviceStatus == .requiresApproval }, set: { model.setService($0) }))
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(model.demo)
                 }
-                if model.serviceStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
+                Divider()
+                settingsRow("Mapping Status") {
+                    Text(tr(model.running ? "Running" : "Paused")).foregroundStyle(.secondary)
+                    Button(tr(model.running ? "Pause" : "Resume")) { model.toggleRunning() }.disabled(model.demo)
+                }
+            }
+            settingsSection("Driver") {
+                DriverSettings(installer: model.driverInstaller, demo: model.demo)
             }
             settingsSection("Configuration") {
-                HStack {
-                    Button(tr("Import…")) { model.importConfiguration() }
-                    Button(tr("Export…")) { model.exportConfiguration() }
-                    Spacer()
-                }.frame(minHeight: 46)
+                settingsRow("Import Configuration") { Button(tr("Import…")) { model.importConfiguration() } }
                 Divider()
-                settingsRow("Background service") { Button(tr(model.running ? "Pause" : "Resume")) { model.toggleRunning() }.disabled(model.demo) }
+                settingsRow("Export Configuration") { Button(tr("Export…")) { model.exportConfiguration() } }
             }
         }.frame(maxWidth: 620, alignment: .leading)
     }
@@ -223,6 +230,8 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(tr(title)).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
             VStack(spacing: 0, content: content)
+                .padding(.horizontal, 14)
+                .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
         }
     }
     private func settingsRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -319,7 +328,16 @@ struct KeyPicker: View {
     var allowsFn = false
     var body: some View {
         ValueMenu(title: tr(KeyCatalog.name(selection))) {
-            ForEach(allowsFn ? KeyCatalog.outputKeys : KeyCatalog.keys) { key in Button(tr(key.name)) { selection = key.id } }
+            ForEach(KeyCatalog.groups(allowsFn: allowsFn)) { group in
+                Menu(tr(group.id)) {
+                    ForEach(group.keys) { key in
+                        Button { selection = key.id } label: {
+                            if selection == key.id { Label(tr(key.name), systemImage: "checkmark") }
+                            else { Text(tr(key.name)) }
+                        }
+                    }
+                }
+            }
         }.accessibilityLabel(tr("Key") + ": " + tr(KeyCatalog.name(selection)))
     }
 }

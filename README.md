@@ -24,7 +24,9 @@ Download an architecture-matching app from [Releases](https://github.com/MrCroxx
 
 Use **Permissions** in the sidebar to check Accessibility, Input Monitoring and background-item registration, and open their System Settings pages. Status refreshes when you return to Click; **Check Again** refreshes it manually.
 
-1. Open **Settings → Input → Virtual HID Driver → Install…**. Click downloads the official signed **8.6.0** package, verifies its pinned SHA-256 and installer signature, and opens macOS Installer. Complete installation there. Existing **8.5.0/8.6.0** installations are supported; there is no automatic replacement.
+Settings use a single grouped list for appearance, startup, keyboard services, the driver, and configuration. Key menus group supported keys into letters, numbers, punctuation, editing, navigation, function keys, and modifiers.
+
+1. Open **Settings → Driver → Virtual HID Driver → Install…**. Click downloads the official signed **8.6.0** package, verifies its pinned SHA-256 and installer signature, and opens macOS Installer. Complete installation there. Existing **8.5.0/8.6.0** installations are supported; there is no automatic replacement.
 2. Use **Activate…** if the driver extension is inactive, then **Enable…** beside **Driver service** if needed. Approve macOS prompts and restart if requested. An already-running shared driver service is reused. Karabiner-Elements itself is not required.
 3. In Click Settings, enable **Keyboard Service**, approve it in macOS Login Items, and grant **Accessibility** and **Input Monitoring** when requested.
 4. Select **Add device**, choose a connected keyboard, and add mappings.

@@ -5,6 +5,23 @@ public struct Key: Identifiable, Sendable {
     public let virtual: UInt16
 }
 public enum KeyCatalog {
+    public struct Group: Identifiable, Sendable {
+        public let id: String
+        public let keys: [Key]
+    }
+    public static func groups(allowsFn: Bool = false) -> [Group] {
+        let available = allowsFn ? outputKeys : keys
+        let categories: [(String, (Int) -> Bool)] = [
+            ("Letters", { (4...29).contains($0) }),
+            ("Numbers", { (30...39).contains($0) }),
+            ("Punctuation", { (45...56).contains($0) }),
+            ("Editing & Whitespace", { (40...44).contains($0) }),
+            ("Navigation", { (73...82).contains($0) }),
+            ("Function Keys", { (58...69).contains($0) || (104...111).contains($0) }),
+            ("Modifiers", { (224...231).contains($0) || $0 == 57 || $0 == fnOutputID })
+        ]
+        return categories.map { name, includes in Group(id: name, keys: available.filter { includes($0.id) }) }
+    }
     public static let keys: [Key] = {
         var result: [Key] = []
         let letters: [UInt16] = [0,11,8,2,14,3,5,4,34,38,40,37,46,45,31,35,12,15,1,17,32,9,13,7,16,6]

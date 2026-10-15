@@ -199,7 +199,21 @@
     "Allows macro actions to control apps and insert text.": "Allows macro actions to control apps and insert text.",
     "Checks Click’s access. Keyboard Service access is verified when capture starts.": "Checks Click’s access. Keyboard Service access is verified when capture starts.",
     "Allows Click’s keyboard service to run in the background.": "Allows Click’s keyboard service to run in the background.",
-    "Optional. Opens Click when you sign in.": "Optional. Opens Click when you sign in."
+    "Optional. Opens Click when you sign in.": "Optional. Opens Click when you sign in.",
+    "Keyboard": "Keyboard",
+    "Mapping Status": "Mapping Status",
+    "Driver": "Driver",
+    "Import Configuration": "Import Configuration",
+    "Export Configuration": "Export Configuration",
+    "Appearance": "Appearance",
+    "Startup": "Startup",
+    "Letters": "Letters",
+    "Numbers": "Numbers",
+    "Punctuation": "Punctuation",
+    "Editing & Whitespace": "Editing & Whitespace",
+    "Navigation": "Navigation",
+    "Function Keys": "Function Keys",
+    "Modifiers": "Modifiers"
   },
   "zh-Hans": {
     "Mappings": "按键映射",
@@ -401,6 +415,20 @@
     "Allows macro actions to control apps and insert text.": "允许宏操作控制应用和输入文本。",
     "Checks Click’s access. Keyboard Service access is verified when capture starts.": "检查 Click 的访问权限；键盘服务的权限会在开始接管时验证。",
     "Allows Click’s keyboard service to run in the background.": "允许 Click 的键盘服务在后台运行。",
-    "Optional. Opens Click when you sign in.": "可选。登录时打开 Click。"
+    "Optional. Opens Click when you sign in.": "可选。登录时打开 Click。",
+    "Keyboard": "键盘",
+    "Mapping Status": "映射状态",
+    "Driver": "驱动",
+    "Import Configuration": "导入配置",
+    "Export Configuration": "导出配置",
+    "Appearance": "界面",
+    "Startup": "启动",
+    "Letters": "字母",
+    "Numbers": "数字",
+    "Punctuation": "标点符号",
+    "Editing & Whitespace": "编辑与空白",
+    "Navigation": "导航键",
+    "Function Keys": "功能键",
+    "Modifiers": "修饰键"
   }
 }
