@@ -1,0 +1,22 @@
+name: Verify
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: swift test
+      - name: Package
+        run: make release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Click-macOS
+          path: build/Click-macOS-*.zip
+          retention-days: 14
