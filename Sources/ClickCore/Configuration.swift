@@ -63,6 +63,15 @@ public struct KeyBinding: Codable, Equatable, Identifiable, Sendable {
     public var source: Int = 57
     public var kind: BindingKind = .key
     public var destination: Int = 41
+    public var destinationPage: UInt32?
+    public var fn: Bool?
+    public var destinationSelection: Int {
+        get { destinationPage == 0x00ff ? KeyCatalog.fnOutputID : destination }
+        set {
+            if newValue == KeyCatalog.fnOutputID { destinationPage = 0x00ff; destination = 3; fn = nil }
+            else { destinationPage = nil; destination = newValue }
+        }
+    }
     public var macroID: UUID?
     public init() {}
 }
@@ -94,7 +103,9 @@ public struct Configuration: Codable, Equatable, Sendable {
                 guard KeyCatalog.keys.contains(where: { $0.id == binding.source }) else { throw ClickError("Invalid source key.") }
                 switch binding.kind {
                 case .key:
-                    guard KeyCatalog.keys.contains(where: { $0.id == binding.destination }) else { throw ClickError("Invalid destination key.") }
+                    let keyboardKey = (binding.destinationPage ?? 7) == 7 && KeyCatalog.keys.contains(where: { $0.id == binding.destination })
+                    let fnKey = binding.destinationPage == 0x00ff && binding.destination == 3 && binding.fn != true
+                    guard keyboardKey || fnKey else { throw ClickError("Invalid destination key.") }
                 case .macro:
                     guard macros.contains(where: { $0.id == binding.macroID }) else { throw ClickError("The assigned macro no longer exists.") }
                     guard !KeyCatalog.isModifier(binding.source) else { throw ClickError("Modifier keys cannot trigger macros.") }
@@ -118,7 +129,6 @@ public struct Configuration: Codable, Equatable, Sendable {
                 }
             }
         }
-        _ = try MappingPlan(configuration: self)
     }
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 2_000_000 else { throw ClickError("Configuration files cannot exceed 2 MB.") }
@@ -141,30 +151,5 @@ public struct HIDMapping: Codable, Equatable, Sendable {
     }
     enum CodingKeys: String, CodingKey {
         case source = "HIDKeyboardModifierMappingSrc", destination = "HIDKeyboardModifierMappingDst"
-    }
-}
-public struct MappingPlan {
-    public var maps: [UUID: [HIDMapping]] = [:]
-    public var triggers: [Int: UUID] = [:]
-    public init(configuration: Configuration) throws {
-        // F13–F20 是宏的传输键；按全局配置稳定分配，设备离线不改变编号。
-        let active = configuration.profiles.filter(\.enabled)
-        let macroBindings = active.flatMap(\.bindings).filter { $0.kind == .macro }
-        guard macroBindings.count <= 8 else { throw ClickError("A maximum of 8 macro triggers can be enabled.") }
-        let reserved = Set((0..<macroBindings.count).map { 104 + $0 })
-        for binding in active.flatMap(\.bindings) {
-            if reserved.contains(binding.source) || (binding.kind == .key && reserved.contains(binding.destination)) {
-                throw ClickError(L10n.format("F13–F%d are reserved for macros. Choose another key.", 12 + macroBindings.count))
-            }
-        }
-        var slot = 104
-        for profile in active {
-            maps[profile.id] = profile.bindings.map { binding in
-                if binding.kind == .key { return HIDMapping(source: binding.source, destination: binding.destination) }
-                defer { slot += 1 }
-                if let id = binding.macroID { triggers[slot] = id }
-                return HIDMapping(source: binding.source, destination: slot)
-            }
-        }
     }
 }

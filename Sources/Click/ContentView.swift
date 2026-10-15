@@ -23,12 +23,12 @@ struct ContentView: View {
                                 Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
                                 Text(tr(error)).textSelection(.enabled)
                                 Spacer()
-                                IconButton("Dismiss", icon: "xmark") { model.error = nil }
                             }.padding(12).background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
                         }
                         switch model.selection {
                         case "macros": macros
                         case "settings": settings
+                        case "permissions": PermissionsView(model: model)
                         default: mappings
                         }
                     }.padding(32).frame(maxWidth: 880, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading)
@@ -48,7 +48,7 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 9) {
-                Image(systemName: "cursorarrow.click").font(.system(size: 15, weight: .medium))
+                Image(nsImage: SwitchSymbol.image).accessibilityLabel("Click")
                 Text("Click").font(.system(size: 17, weight: .semibold))
             }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 27)
             navigation("devices", "Mappings", "keyboard")
@@ -78,6 +78,7 @@ struct ContentView: View {
                 }
             } else { Spacer() }
             Spacer(minLength: 12)
+            navigation("permissions", "Permissions", "lock.shield")
             navigation("settings", "Settings", "gearshape")
             HStack(spacing: 7) {
                 Circle().fill(model.running ? Color.green.opacity(0.8) : Color.secondary.opacity(0.5)).frame(width: 5, height: 5)
@@ -119,11 +120,9 @@ struct ContentView: View {
     }
     private var toolbar: some View {
         HStack(spacing: 16) {
-            Text(tr(model.selection == "macros" ? "Macros" : model.selection == "settings" ? "Settings" : "Mappings"))
+            Text(tr(model.selection == "macros" ? "Macros" : model.selection == "settings" ? "Settings" : model.selection == "permissions" ? "Permissions" : "Mappings"))
                 .font(.system(size: 13, weight: .medium))
             Spacer()
-            if model.dirty { Circle().fill(.orange.opacity(0.8)).frame(width: 5, height: 5).help(tr("Unsaved changes")) }
-            Button(tr("Save")) { model.save() }.keyboardShortcut("s").disabled(!model.dirty).controlSize(.regular)
             Menu {
                 Button(tr("Import…")) { model.importConfiguration() }
                 Button(tr("Export…")) { model.exportConfiguration() }
@@ -182,7 +181,7 @@ struct ContentView: View {
         }.onAppear { if model.selectedMacro == nil { model.selectedMacro = model.configuration.macros.first?.id } }
     }
     private var settings: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 28) {
             Text(tr("Settings")).font(.system(size: 24, weight: .semibold))
             settingsSection("General") {
                 settingsRow("Language") {
@@ -192,56 +191,60 @@ struct ContentView: View {
                 }
                 Divider()
                 settingsRow("Launch at login") {
+                    if model.loginStatus == .requiresApproval {
+                        Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() }.disabled(model.demo)
+                    }
                     Toggle(tr("Launch at login"), isOn: Binding(get: { model.loginStatus == .enabled || model.loginStatus == .requiresApproval }, set: { model.setLogin($0) }))
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(model.demo)
                 }
-                if model.loginStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
             }
-            settingsSection("Permissions") {
-                permission("Accessibility", granted: model.accessibility) { model.requestAccessibility(); model.openSettings("Privacy_Accessibility") }
+            settingsSection("Keyboard") {
+                settingsRow("Keyboard Service") {
+                    if model.serviceStatus == .requiresApproval {
+                        Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() }.disabled(model.demo)
+                    }
+                    Toggle(tr("Keyboard Service"), isOn: Binding(get: { model.serviceStatus == .enabled || model.serviceStatus == .requiresApproval }, set: { model.setService($0) }))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(model.demo)
+                }
                 Divider()
-                permission("Input Monitoring", granted: model.inputMonitoring) { model.requestInputMonitoring(); model.openSettings("Privacy_ListenEvent") }
+                settingsRow("Mapping Status") {
+                    Text(tr(model.running ? "Running" : "Paused")).foregroundStyle(.secondary)
+                    Button(tr(model.running ? "Pause" : "Resume")) { model.toggleRunning() }.disabled(model.demo)
+                }
+            }
+            settingsSection("Driver") {
+                DriverSettings(installer: model.driverInstaller, demo: model.demo)
             }
             settingsSection("Configuration") {
-                HStack {
-                    Button(tr("Import…")) { model.importConfiguration() }
-                    Button(tr("Export…")) { model.exportConfiguration() }
-                    Spacer()
-                }.frame(minHeight: 46)
+                settingsRow("Import Configuration") { Button(tr("Import…")) { model.importConfiguration() } }
                 Divider()
-                settingsRow("Background service") { Button(tr(model.running ? "Pause" : "Resume")) { model.toggleRunning() }.disabled(model.demo) }
+                settingsRow("Export Configuration") { Button(tr("Export…")) { model.exportConfiguration() } }
             }
-            DisclosureGroup(tr("Advanced")) {
-                Text(tr("Macros reserve F13–F20 across all keyboards. Up to 8 triggers."))
-                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10)
-            }.foregroundStyle(.secondary)
         }.frame(maxWidth: 620, alignment: .leading)
     }
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(tr(title)).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
             VStack(spacing: 0, content: content)
+                .padding(.horizontal, 14)
+                .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
         }
     }
     private func settingsRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         HStack { Text(tr(title)); Spacer(); content() }.frame(minHeight: 46)
     }
-    private func permission(_ title: String, granted: Bool, action: @escaping () -> Void) -> some View {
-        settingsRow(title) {
-            if granted { Label(tr("Granted"), systemImage: "checkmark").foregroundStyle(.secondary) }
-            else { Button(tr("Open Settings"), action: action).disabled(model.demo) }
-        }
-    }
+
 }
 
 struct IconButton: View {
     let title: String
     let icon: String
+    let destructive: Bool
     let action: () -> Void
-    init(_ title: String, icon: String, action: @escaping () -> Void) { self.title = title; self.icon = icon; self.action = action }
+    init(_ title: String, icon: String, destructive: Bool = false, action: @escaping () -> Void) { self.title = title; self.icon = icon; self.destructive = destructive; self.action = action }
     var body: some View {
-        Button(action: action) { Image(systemName: icon).frame(width: 20, height: 20).contentShape(Rectangle()) }
-            .buttonStyle(.plain).foregroundStyle(.secondary).help(tr(title)).accessibilityLabel(tr(title))
+        Button(role: destructive ? .destructive : nil, action: action) { Image(systemName: icon).frame(width: 20, height: 20).contentShape(Rectangle()) }
+            .buttonStyle(.plain).foregroundStyle(destructive ? Color.red : Color.secondary).help(tr(title)).accessibilityLabel(tr(title))
     }
 }
 
@@ -274,13 +277,15 @@ struct DeviceEditor: View {
                             Button(tr("Key")) { binding.kind = .key }
                             Button(tr("Macro")) { binding.kind = .macro; if binding.macroID == nil { binding.macroID = macros.first?.id } }
                         }.frame(width: 100)
-                        if binding.kind == .key { KeyPicker(selection: $binding.destination).frame(maxWidth: .infinity) }
+                        if binding.kind == .key {
+                            KeyPicker(selection: $binding.destinationSelection, allowsFn: true).frame(maxWidth: .infinity)
+                        }
                         else {
                             ValueMenu(title: macros.first(where: { $0.id == binding.macroID })?.name ?? tr("Choose a macro")) {
                                 ForEach(macros) { macro in Button(macro.name) { binding.macroID = macro.id } }
                             }.frame(maxWidth: .infinity)
                         }
-                        IconButton("Remove Mapping", icon: "minus") { profile.bindings.removeAll { $0.id == binding.id } }
+                        IconButton("Remove Mapping", icon: "trash", destructive: true) { profile.bindings.removeAll { $0.id == binding.id } }
                     }.padding(.horizontal, 12).frame(height: 56)
                     Divider()
                 }
@@ -317,9 +322,19 @@ struct ValueMenu<Content: View>: View {
 
 struct KeyPicker: View {
     @Binding var selection: Int
+    var allowsFn = false
     var body: some View {
         ValueMenu(title: tr(KeyCatalog.name(selection))) {
-            ForEach(KeyCatalog.keys) { key in Button(tr(key.name)) { selection = key.id } }
+            ForEach(KeyCatalog.groups(allowsFn: allowsFn)) { group in
+                Menu(tr(group.id)) {
+                    ForEach(group.keys) { key in
+                        Button { selection = key.id } label: {
+                            if selection == key.id { Label(tr(key.name), systemImage: "checkmark") }
+                            else { Text(tr(key.name)) }
+                        }
+                    }
+                }
+            }
         }.accessibilityLabel(tr("Key") + ": " + tr(KeyCatalog.name(selection)))
     }
 }
@@ -346,7 +361,7 @@ struct MacroEditor: View {
                                 Spacer()
                                 IconButton("Move Up", icon: "chevron.up") { macro.steps.swapAt(index, index - 1) }.disabled(index == 0)
                                 IconButton("Move Down", icon: "chevron.down") { macro.steps.swapAt(index, index + 1) }.disabled(index == macro.steps.count - 1)
-                                IconButton("Remove Step", icon: "minus") { macro.steps.removeAll { $0.id == step.id } }
+                                IconButton("Remove Step", icon: "trash", destructive: true) { macro.steps.removeAll { $0.id == step.id } }
                             }
                             StepEditor(step: $macro.steps[index])
                         }
@@ -395,6 +410,59 @@ struct StepEditor: View {
             TextEditor(text: $step.value).font(.body).frame(minHeight: 76).padding(6)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(.primary.opacity(0.12)))
                 .accessibilityLabel(tr("Text"))
+        }
+    }
+}
+
+
+private struct DriverSettings: View {
+    @ObservedObject var installer: DriverInstaller
+    let demo: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(tr("Virtual HID Driver"))
+                Spacer()
+                Text(tr(installer.packageStatus) + (installer.version.map { " · " + $0 } ?? "")).foregroundStyle(.secondary)
+                if installer.version == nil {
+                    Button(tr("Install…")) { installer.install() }.disabled(installer.busy || demo)
+                } else {
+                    Menu {
+                        Button(tr("Install 8.6.0…")) { installer.install() }
+                        Button(tr("Official download")) { NSWorkspace.shared.open(DriverPackage.releaseURL) }
+                    } label: { Image(systemName: "ellipsis") }
+                    .menuStyle(.borderlessButton).fixedSize().disabled(installer.busy || demo)
+                    .accessibilityLabel(tr("Driver options"))
+                }
+            }.frame(minHeight: 46)
+            if installer.supported {
+                HStack {
+                    Text(tr("Driver extension")); Spacer()
+                    if installer.extensionActive { Text(tr("Active")).foregroundStyle(.secondary) }
+                    else { Button(tr("Activate…")) { installer.activate() }.disabled(installer.busy || demo) }
+                }.frame(minHeight: 46)
+                HStack {
+                    Text(tr("Driver service")); Spacer()
+                    if installer.serviceAvailable { Text(tr("Running")).foregroundStyle(.secondary) }
+                    else if installer.serviceStatus == .requiresApproval {
+                        Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() }.disabled(demo)
+                    } else { Button(tr("Enable…")) { installer.enableService() }.disabled(installer.busy || demo) }
+                }.frame(minHeight: 46)
+            }
+            if let activity = installer.activity {
+                HStack {
+                    if installer.busy { ProgressView().controlSize(.small) }
+                    Text(tr(activity)).foregroundStyle(.secondary)
+                    if installer.activity == "Downloading driver…" { Button(tr("Cancel")) { installer.cancelDownload() } }
+                }.padding(.vertical, 8)
+            }
+            if let error = installer.error {
+                HStack(alignment: .top) {
+                    Text(tr(error)).foregroundStyle(.red).textSelection(.enabled)
+                    Spacer()
+                    IconButton("Dismiss", icon: "xmark") { installer.error = nil }
+                }.padding(.vertical, 8)
+            }
         }
     }
 }

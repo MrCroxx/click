@@ -2,68 +2,95 @@ import AppKit
 import SwiftUI
 import ServiceManagement
 import ClickCore
+import ClickIPC
+import IOKit.hidsystem
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var configuration = Configuration()
+    @Published var configuration = Configuration() {
+        didSet { if readyForEdits { updater.submit(configuration) } }
+    }
     @Published var devices: [ConnectedDevice] = []
     @Published var running = false
     @Published var message = "Ready"
     @Published var error: String?
     @Published var loginStatus = SMAppService.mainApp.status
     @Published var accessibility = AXIsProcessTrusted()
-    @Published var inputMonitoring = CGPreflightListenEventAccess()
+    @Published var inputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+    @Published var inputMonitoringRequested = false
     @Published var selection = "devices"
     @Published var selectedProfile: UUID?
     @Published var selectedMacro: UUID?
     let demo: Bool
     private let store: ConfigurationStore
     private var hardware: Hardware?
-    private let tap = MacroTap()
-    let runner = MacroRunner()
+    private let daemon = DaemonClient()
+    let driverInstaller = DriverInstaller()
+    lazy var runner = MacroRunner(shortcutOutput: { [weak self] shortcut in
+        guard let self else { throw CancellationError() }; try await self.daemon.shortcut(shortcut)
+    })
+    @Published var serviceStatus = SMAppService.daemon(plistName: ClickService.plist).status
+    @Published var applying = false
+    private var operation = UUID()
     private var timer: Timer?
     private var active = Configuration()
-    private var lastDeviceIDs: [UInt64] = []
     private var loadFailed = false
-    var dirty: Bool { configuration != active }
+    private var readyForEdits = false
+    private lazy var updater: ConfigurationUpdater = {
+        let updater = ConfigurationUpdater(persist: { [weak self] draft in
+            guard let self else { return }
+            guard !self.loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
+            if !self.demo { try self.store.save(draft) }
+        }, apply: { [weak self] draft in
+            guard let self else { return }
+            self.active = draft
+            try await self.start()
+        }, stop: { [weak self] in
+            guard let self, !self.demo else { return }
+            try self.pauseThrowing()
+        })
+        updater.onState = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .saved: self.applying = true; self.error = nil; self.message = "Applying changes…"
+            case .applying: self.applying = true
+            case .applied: self.applying = false; self.error = nil; self.message = self.demo ? "Preview" : "Ready"
+            case .saveFailed(let detail): self.applying = false; self.message = "Changes not saved"; self.error = detail
+            case .applyFailed(let detail): self.applying = false; self.message = "Saved. Mappings paused."; self.error = detail
+            }
+        }
+        return updater
+    }()
     init(demo: Bool = false) {
         self.demo = demo
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Click")
         store = ConfigurationStore(url: directory.appendingPathComponent("config.json"))
         runner.onStatus = { [weak self] in self?.message = $0 }
-        tap.onTrigger = { [weak self] id in
+        daemon.onTrigger = { [weak self] id in
             DispatchQueue.main.async {
                 guard let self, self.running, let macro = self.active.macros.first(where: { $0.id == id }) else { return }
                 self.runner.run(macro)
             }
         }
-        tap.onFailure = { [weak self] in
-            DispatchQueue.main.async {
-                self?.pause(); self?.error = "The macro listener stopped. Mappings are paused. Check permissions and resume."
-            }
+        daemon.onFailure = { [weak self] message in
+            self?.pause(); self?.error = message
         }
-        if demo { seedDemo(); return }
+        driverInstaller.prepareChange = { [weak self] in self?.updater.cancel(); try self?.pauseThrowing() }
+        if demo { seedDemo(); readyForEdits = true; return }
+        driverInstaller.refresh()
         do {
             hardware = try Hardware(directory: directory)
             try hardware?.restore()
             configuration = try store.load(); active = configuration
             refreshDevices()
         } catch { self.error = error.localizedDescription; loadFailed = true }
-        if !loadFailed && configuration.profiles.contains(where: \.enabled) {
-            do { try start() } catch { self.error = error.localizedDescription }
-        }
+        readyForEdits = true
+        if !loadFailed && configuration.profiles.contains(where: \.enabled) { updater.submit(configuration) }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.runner.cancel() }
-        }
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.running else { return }
-                do { try self.hardware?.apply(self.active, plan: MappingPlan(configuration: self.active)) }
-                catch { self.pause(); self.error = error.localizedDescription }
-            }
+            Task { @MainActor in self?.pause() }
         }
     }
     private func seedDemo() {
@@ -83,7 +110,6 @@ final class AppModel: ObservableObject {
     }
     func refreshDevices() {
         let services = hardware?.devices() ?? []
-        lastDeviceIDs = services.map(\.id)
         devices = services.reduce(into: []) { result, device in
             if !result.contains(where: { $0.identity.matches(device.identity) && device.identity.matches($0.identity) }) {
                 result.append(device)
@@ -91,15 +117,12 @@ final class AppModel: ObservableObject {
         }
     }
     func refresh() {
-        accessibility = AXIsProcessTrusted(); inputMonitoring = CGPreflightListenEventAccess()
+        accessibility = AXIsProcessTrusted(); inputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         loginStatus = SMAppService.mainApp.status
-        let previous = lastDeviceIDs
+        driverInstaller.refresh()
         refreshDevices()
-        if running && (!accessibility && !tap.triggers.isEmpty) { pause(); error = "Accessibility permission was revoked. Mappings are paused." }
-        if running && previous != lastDeviceIDs {
-            do { try hardware?.apply(active, plan: MappingPlan(configuration: active)); message = "Connected devices updated" }
-            catch { pause(); self.error = error.localizedDescription }
-        }
+        serviceStatus = SMAppService.daemon(plistName: ClickService.plist).status
+        if running && !accessibility && !active.macros.isEmpty { runner.cancel() }
     }
     func addDevice(_ device: ConnectedDevice) {
         if let profile = configuration.profiles.first(where: { $0.device.matches(device.identity) }) { selectedProfile = profile.id; return }
@@ -107,52 +130,52 @@ final class AppModel: ObservableObject {
         configuration.profiles.append(profile); selectedProfile = profile.id
     }
     func connected(_ profile: DeviceProfile) -> Bool { demo || devices.contains { profile.device.matches($0.identity) } }
-    func save() {
-        do {
-            try configuration.validate()
-            if demo { active = configuration; message = "Preview updated"; return }
-            guard !loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
-            try pauseThrowing()
-            let previous = active
-            active = configuration
-            do {
-                try start()
-                try store.save(configuration)
-            } catch {
-                try? pauseThrowing(); active = previous
-                throw error
-            }
-            message = "Saved"; error = nil
-        } catch { self.error = error.localizedDescription }
-    }
-    func start() throws {
+    func start() async throws {
         guard !demo else { return }
+        guard !loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
         guard hardware != nil else { throw ClickError("Device service unavailable. Restart Click.") }
         try active.validate()
-        let plan = try MappingPlan(configuration: active)
-        if !plan.triggers.isEmpty {
-            try tap.start()
-            tap.triggers = Dictionary(uniqueKeysWithValues: plan.triggers.compactMap { usage, id in KeyCatalog.virtual(usage).map { ($0, id) } })
+        guard active.profiles.contains(where: { $0.enabled && !$0.bindings.isEmpty }) else {
+            daemon.stop(); running = false; return
         }
-        do { try hardware?.apply(active, plan: plan) }
-        catch { tap.stop(); throw error }
+        guard SMAppService.daemon(plistName: ClickService.plist).status == .enabled else {
+            throw ClickError("Enable Keyboard Service in Settings and approve it in Login Items.")
+        }
+        let token = UUID(); operation = token
+        try await daemon.start(active)
+        guard operation == token else { throw CancellationError() }
         running = true
     }
     func toggleRunning() {
-        if running { pause() }
-        else { do { try start(); message = "Service started"; error = nil } catch { self.error = error.localizedDescription } }
+        if running || applying { pause() }
+        else { updater.submit(configuration) }
+    }
+    func setService(_ enabled: Bool) {
+        guard !demo else { return }
+        do {
+            let service = SMAppService.daemon(plistName: ClickService.plist)
+            if enabled { try service.register() }
+            else { pause(); try service.unregister() }
+            serviceStatus = service.status; error = nil
+            if enabled && serviceStatus == .enabled { updater.submit(configuration) }
+            if serviceStatus == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+        } catch { self.error = error.localizedDescription }
     }
     private func pauseThrowing() throws {
         runner.cancel()
-        // 先恢复 HID，再撤掉吞键监听，防止宏通道键漏出。
+        operation = UUID()
+        daemon.stop()
+        running = false
         try hardware?.restore()
-        tap.stop(); running = false
     }
     func pause() {
+        updater.cancel()
+        applying = false
         do { try pauseThrowing(); message = "Paused. Original mappings restored." }
         catch { self.error = error.localizedDescription }
     }
     func shutdown() -> Bool {
+        updater.cancel()
         do { try pauseThrowing(); return true }
         catch { self.error = error.localizedDescription; return false }
     }
@@ -162,7 +185,7 @@ final class AppModel: ObservableObject {
         do {
             let imported = try Configuration.decode(Data(contentsOf: url))
             configuration = imported; selectedProfile = imported.profiles.first?.id; selectedMacro = imported.macros.first?.id
-            message = "Configuration imported. Save to apply."; error = nil
+            // Configuration assignment above persists and schedules application.
         } catch { self.error = error.localizedDescription }
     }
     func exportConfiguration() {
@@ -183,7 +206,16 @@ final class AppModel: ObservableObject {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
-    func requestInputMonitoring() { _ = CGRequestListenEventAccess() }
+    func requestInputMonitoring() {
+        guard !demo else { return }
+        inputMonitoringRequested = true
+        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        inputMonitoring = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+    }
+    func revealApplication() {
+        guard !demo else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+    }
     func openSettings(_ anchor: String) {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") { NSWorkspace.shared.open(url) }
     }

@@ -17,29 +17,6 @@ final class ConfigurationTests: XCTestCase {
         let original = fixture()
         XCTAssertEqual(try Configuration.decode(original.encoded()), original)
     }
-    func testDeviceScopedMapping() throws {
-        var config = fixture()
-        var second = DeviceProfile(name: "Other", device: .init(vendor: 1, product: 2, location: 4))
-        second.enabled = true
-        var binding = KeyBinding(); binding.source = 57; binding.destination = 40
-        second.bindings = [binding]; config.profiles.append(second)
-        try config.validate()
-        let plan = try MappingPlan(configuration: config)
-        XCTAssertEqual(plan.maps[config.profiles[0].id]?.first, HIDMapping(source: 57, destination: 41))
-        XCTAssertEqual(plan.maps[second.id]?.first, HIDMapping(source: 57, destination: 40))
-    }
-    func testMacroSlotCompilesToF13() throws {
-        let config = fixture(), plan = try MappingPlan(configuration: fixture())
-        XCTAssertEqual(plan.triggers.count, 1)
-        let own = try MappingPlan(configuration: config)
-        XCTAssertEqual(own.triggers[104], config.macros[0].id)
-        XCTAssertEqual(own.maps[config.profiles[0].id]?.last, HIDMapping(source: 58, destination: 104))
-    }
-    func testDisabledProfilesAreNotApplied() throws {
-        var config = fixture(); config.profiles[0].enabled = false
-        let plan = try MappingPlan(configuration: config)
-        XCTAssertTrue(plan.maps.isEmpty); XCTAssertTrue(plan.triggers.isEmpty)
-    }
     func testDuplicateSourceRejected() {
         var config = fixture(); config.profiles[0].bindings[1].source = 57
         XCTAssertThrowsError(try config.validate())
@@ -50,24 +27,6 @@ final class ConfigurationTests: XCTestCase {
     }
     func testModifierMacroRejected() {
         var config = fixture(); config.profiles[0].bindings[1].source = 227
-        XCTAssertThrowsError(try config.validate())
-    }
-    func testReservedKeyCollisionRejected() {
-        var config = fixture(); config.profiles[0].bindings[0].destination = 104
-        XCTAssertThrowsError(try config.validate())
-    }
-    func testEightMacroChannelsAndOverflow() throws {
-        var config = fixture()
-        var bindings: [KeyBinding] = []
-        for source in 4..<12 {
-            var binding = KeyBinding(); binding.source = source; binding.kind = .macro; binding.macroID = config.macros[0].id
-            bindings.append(binding)
-        }
-        config.profiles[0].bindings = bindings
-        try config.validate()
-        XCTAssertEqual(try MappingPlan(configuration: config).triggers.count, 8)
-        var ninth = bindings[0]; ninth.id = UUID(); ninth.source = 12
-        config.profiles[0].bindings.append(ninth)
         XCTAssertThrowsError(try config.validate())
     }
     func testUnknownVersionRejected() throws {

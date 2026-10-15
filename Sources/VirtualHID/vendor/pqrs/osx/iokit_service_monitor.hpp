@@ -1,0 +1,322 @@
+#pragma once
+
+// pqrs::osx::iokit_service_monitor v6.5.0
+
+// (C) Copyright Takayama Fumihiko 2018.
+// Distributed under the Boost Software License, Version 1.0.
+// (See https://www.boost.org/LICENSE_1_0.txt)
+
+// `pqrs::osx::iokit_service_monitor` can be used safely in a multi-threaded environment.
+
+#include <algorithm>
+#include <nod/nod.hpp>
+#include <optional>
+#include <pqrs/cf/run_loop_thread.hpp>
+#include <pqrs/dispatcher.hpp>
+#include <pqrs/gsl.hpp>
+#include <pqrs/osx/iokit_iterator.hpp>
+#include <pqrs/osx/iokit_object_ptr.hpp>
+#include <pqrs/osx/iokit_registry_entry.hpp>
+#include <pqrs/osx/iokit_types.hpp>
+#include <pqrs/osx/kern_return.hpp>
+#include <unordered_set>
+
+namespace pqrs::osx {
+class iokit_service_monitor final : dispatcher::extra::dispatcher_client {
+private:
+  // Keep the guard first so member initialization failures also detach.
+  pqrs::dispatcher::extra::dispatcher_client_constructor_exception_guard dispatcher_client_constructor_exception_guard_{*this};
+
+public:
+  // Signals (invoked from the dispatcher thread)
+
+  nod::signal<void(iokit_registry_entry_id::value_t, iokit_object_ptr)> service_matched;
+  nod::signal<void(iokit_registry_entry_id::value_t)> service_terminated;
+  nod::signal<void(const std::string&, kern_return)> error_occurred;
+
+  // Methods
+
+  iokit_service_monitor(const iokit_service_monitor&) = delete;
+
+  // Creating cf::run_loop_thread instances may rarely prevent CFRunLoop processing from starting,
+  // particularly when the system is under heavy load on macOS 26.
+  // In that situation, cf::run_loop_thread terminates the process to avoid hanging indefinitely.
+  // If monitor owned its own cf::run_loop_thread, repeated monitor construction would also repeatedly expose that failure path.
+  // For that reason, cf::run_loop_thread is injected from the outside.
+  iokit_service_monitor(std::weak_ptr<dispatcher::dispatcher> weak_dispatcher,
+                        pqrs::not_null_shared_ptr_t<cf::run_loop_thread> run_loop_thread,
+                        CFDictionaryRef _Nonnull matching_dictionary)
+      : dispatcher_client(weak_dispatcher),
+        run_loop_thread_(run_loop_thread),
+        matching_dictionary_(matching_dictionary) {
+    dispatcher_client_constructor_exception_guard_.initialize();
+  }
+
+  ~iokit_service_monitor() override {
+    // dispatcher_client
+
+    detach_from_dispatcher([this] {
+      scan_timer_.stop();
+    });
+
+    // run_loop_thread
+
+    run_loop_thread_->enqueue(^{
+      stop();
+    });
+
+    // Wait until all tasks are processed
+
+    auto wait = make_thread_wait();
+    run_loop_thread_->enqueue(^{
+      wait->notify();
+    });
+    wait->wait_notice();
+  }
+
+  void async_start() {
+    run_loop_thread_->enqueue(^{
+      start();
+    });
+  }
+
+  void async_stop() {
+    run_loop_thread_->enqueue(^{
+      stop();
+    });
+  }
+
+private:
+  // This method is executed in run_loop_thread_.
+  void start() {
+    if (!notification_port_) {
+      notification_port_ = IONotificationPortCreate(type_safe::get(iokit_mach_port::null));
+      if (!notification_port_) {
+        enqueue_to_dispatcher([this] {
+          error_occurred("IONotificationPortCreate is failed.", kIOReturnError);
+        });
+        return;
+      }
+
+      if (auto loop_source = IONotificationPortGetRunLoopSource(notification_port_)) {
+        run_loop_thread_->add_source(loop_source);
+      } else {
+        IONotificationPortDestroy(notification_port_);
+        notification_port_ = nullptr;
+
+        enqueue_to_dispatcher([this] {
+          error_occurred("IONotificationPortGetRunLoopSource is failed.", kIOReturnError);
+        });
+        return;
+      }
+    }
+
+    // kIOMatchedNotification
+
+    if (!matched_notification_.get() &&
+        *matching_dictionary_) {
+      io_iterator_t it = IO_OBJECT_NULL;
+      CFRetain(*matching_dictionary_);
+      kern_return r = IOServiceAddMatchingNotification(notification_port_,
+                                                       kIOFirstMatchNotification,
+                                                       *matching_dictionary_,
+                                                       &static_matched_callback,
+                                                       static_cast<void*>(this),
+                                                       &it);
+      if (r) {
+        matched_notification_ = adopt_iokit_iterator(it);
+        matched_callback(make_services(matched_notification_));
+      } else {
+        enqueue_to_dispatcher([this, r] {
+          error_occurred("IOServiceAddMatchingNotification is failed.", r);
+        });
+      }
+    }
+
+    // kIOTerminatedNotification
+
+    if (!terminated_notification_.get() &&
+        *matching_dictionary_) {
+      io_iterator_t it = IO_OBJECT_NULL;
+      CFRetain(*matching_dictionary_);
+      kern_return r = IOServiceAddMatchingNotification(notification_port_,
+                                                       kIOTerminatedNotification,
+                                                       *matching_dictionary_,
+                                                       &static_terminated_callback,
+                                                       static_cast<void*>(this),
+                                                       &it);
+      if (r) {
+        terminated_notification_ = adopt_iokit_iterator(it);
+        terminated_callback(make_services(terminated_notification_));
+      } else {
+        enqueue_to_dispatcher([this, r] {
+          error_occurred("IOServiceAddMatchingNotification is failed.", r);
+        });
+      }
+    }
+
+    //
+    // Setup scan timer
+    //
+
+    enqueue_to_dispatcher([this] {
+      // There are rare cases where IOFirstMatchNotification and kIOTerminatedNotification are not triggered.
+      // In such cases, service_terminated is never called for the terminated service.
+      // To avoid this issue, periodic scans will be performed, and callbacks will be invoked for services that didn't receive the notification.
+
+      scan_timer_.start(
+          [this] {
+            if (!*matching_dictionary_) {
+              return;
+            }
+
+            io_iterator_t it = IO_OBJECT_NULL;
+            CFRetain(*matching_dictionary_);
+            kern_return r = IOServiceGetMatchingServices(type_safe::get(iokit_mach_port::null),
+                                                         *matching_dictionary_,
+                                                         &it);
+            if (r) {
+              auto services = make_services(adopt_iokit_iterator(it));
+
+              // Call service_matched
+
+              for (const auto& s : services) {
+                if (auto registry_entry_id = s.find_registry_entry_id()) {
+                  invoke_service_matched(*registry_entry_id, s);
+                }
+              }
+
+              // Call service_terminated
+
+              std::unordered_set<iokit_registry_entry_id::value_t> terminated_registry_entry_ids;
+
+              for (const auto stored_registry_entry_id : registry_entry_ids_) {
+                if (!std::ranges::any_of(services, [stored_registry_entry_id](const auto& s) {
+                      if (auto registry_entry_id = s.find_registry_entry_id()) {
+                        return stored_registry_entry_id == *registry_entry_id;
+                      }
+                      return false;
+                    })) {
+                  terminated_registry_entry_ids.insert(stored_registry_entry_id);
+                }
+              }
+
+              for (const auto terminated_registry_entry_id : terminated_registry_entry_ids) {
+                invoke_service_terminated(terminated_registry_entry_id);
+              }
+            } else {
+              enqueue_to_dispatcher([this, r] {
+                error_occurred("IOServiceGetMatchingServices is failed.", r);
+              });
+            }
+          },
+          std::chrono::milliseconds(3000));
+    });
+  }
+
+  // This method is executed in run_loop_thread_.
+  void stop() {
+    matched_notification_ = iokit_iterator();
+    terminated_notification_ = iokit_iterator();
+
+    if (notification_port_) {
+      if (auto loop_source = IONotificationPortGetRunLoopSource(notification_port_)) {
+        run_loop_thread_->remove_source(loop_source);
+      }
+
+      IONotificationPortDestroy(notification_port_);
+      notification_port_ = nullptr;
+    }
+
+    enqueue_to_dispatcher([this] {
+      scan_timer_.stop();
+      registry_entry_ids_.clear();
+    });
+  }
+
+  static void static_matched_callback(void* _Nonnull refcon, io_iterator_t iterator) {
+    auto self = static_cast<iokit_service_monitor*>(refcon);
+    if (!self) {
+      return;
+    }
+
+    auto services = make_services(iokit_iterator(iterator));
+
+    self->run_loop_thread_->enqueue(^{
+      self->matched_callback(services);
+    });
+  }
+
+  void matched_callback(const std::vector<iokit_registry_entry>& services) {
+    for (const auto& s : services) {
+      if (auto registry_entry_id = s.find_registry_entry_id()) {
+        enqueue_to_dispatcher([this, registry_entry_id, s] {
+          invoke_service_matched(*registry_entry_id, s);
+        });
+      }
+    }
+  }
+
+  // This method is executed in the dispatcher thread.
+  void invoke_service_matched(iokit_registry_entry_id::value_t registry_entry_id,
+                              iokit_registry_entry service) {
+    if (!registry_entry_ids_.contains(registry_entry_id)) {
+      registry_entry_ids_.insert(registry_entry_id);
+      service_matched(registry_entry_id, service.get());
+    }
+  }
+
+  static void static_terminated_callback(void* _Nonnull refcon, io_iterator_t iterator) {
+    auto self = static_cast<iokit_service_monitor*>(refcon);
+    if (!self) {
+      return;
+    }
+
+    auto services = make_services(iokit_iterator(iterator));
+
+    self->run_loop_thread_->enqueue(^{
+      self->terminated_callback(services);
+    });
+  }
+
+  void terminated_callback(const std::vector<iokit_registry_entry>& services) {
+    for (const auto& s : services) {
+      if (auto registry_entry_id = s.find_registry_entry_id()) {
+        enqueue_to_dispatcher([this, registry_entry_id] {
+          invoke_service_terminated(*registry_entry_id);
+        });
+      }
+    }
+  }
+
+  // This method is executed in the dispatcher thread.
+  void invoke_service_terminated(iokit_registry_entry_id::value_t registry_entry_id) {
+    if (registry_entry_ids_.contains(registry_entry_id)) {
+      registry_entry_ids_.erase(registry_entry_id);
+      service_terminated(registry_entry_id);
+    }
+  }
+
+  [[nodiscard]] static std::vector<iokit_registry_entry> make_services(const iokit_iterator& iterator) {
+    std::vector<iokit_registry_entry> services;
+
+    while (auto next = iterator.next()) {
+      services.emplace_back(iokit_registry_entry(next));
+    }
+
+    return services;
+  }
+
+  pqrs::not_null_shared_ptr_t<cf::run_loop_thread> run_loop_thread_;
+  cf::cf_ptr<CFDictionaryRef> matching_dictionary_;
+
+  IONotificationPortRef _Nullable notification_port_{nullptr};
+  iokit_iterator matched_notification_;
+  iokit_iterator terminated_notification_;
+
+  std::unordered_set<iokit_registry_entry_id::value_t> registry_entry_ids_;
+
+  // Construct after potentially throwing members; destruction requires detach.
+  pqrs::dispatcher::extra::timer scan_timer_{*this};
+};
+} // namespace pqrs::osx

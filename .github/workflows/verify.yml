@@ -14,9 +14,13 @@ jobs:
       - name: Test
         run: swift test
       - name: Package
+        env:
+          SIGNING_IDENTITY: "-"
         run: make release
       - uses: actions/upload-artifact@v4
         with:
           name: Click-macOS
-          path: build/Click-macOS-*.zip
+          path: |
+            build/Click-macOS-*.zip
+            build/Click-macOS-*.dmg
           retention-days: 14

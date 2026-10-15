@@ -23,11 +23,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let other = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.mrcroxx.click")
             .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
         if let other, !demo { other.activate(); NSApp.terminate(nil); return }
+        if let iconURL = Bundle.main.url(forResource: "Click", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApp.applicationIconImage = icon
+        }
         model = AppModel(demo: demo)
         installMenu()
         NSApp.setActivationPolicy(.accessory)
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item?.button?.image = NSImage(systemSymbolName: "cursorarrow.click.2", accessibilityDescription: "Click")
+        item?.button?.image = SwitchSymbol.image
         installStatusMenu()
         NotificationCenter.default.addObserver(forName: L10n.didChange, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.installMenu(); self?.installStatusMenu() }

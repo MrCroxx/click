@@ -32,6 +32,8 @@ final class Hardware {
             guard IOHIDServiceClientConformsTo(service, 1, 6) != 0 else { return nil }
             func number(_ key: String) -> Int { (IOHIDServiceClientCopyProperty(service, key as CFString) as? NSNumber)?.intValue ?? 0 }
             func string(_ key: String) -> String { IOHIDServiceClientCopyProperty(service, key as CFString) as? String ?? "" }
+            guard !(number("VendorID") == 0x16c0 && number("ProductID") == 0x27db),
+                  !string("Product").localizedCaseInsensitiveContains("virtual") else { return nil }
             let id = (IOHIDServiceClientGetRegistryID(service) as? NSNumber)?.uint64Value ?? 0
             return ConnectedDevice(id: id, name: string("Product").isEmpty ? "Keyboard" : string("Product"),
                 identity: DeviceIdentity(vendor: number("VendorID"), product: number("ProductID"), serial: string("SerialNumber"), location: number("LocationID")),
@@ -68,25 +70,5 @@ final class Hardware {
         }
         if !failures.isEmpty { throw ClickError(failures.joined(separator: "\n")) }
         journal = []; try saveJournal()
-    }
-    func apply(_ config: Configuration, plan: MappingPlan) throws {
-        try restore()
-        do {
-            for device in devices() {
-                guard let profile = config.profiles.first(where: { $0.enabled && $0.device.matches(device.identity) }),
-                      let map = plan.maps[profile.id], !map.isEmpty else { continue }
-                let original = try read(device.service)
-                // 保留不冲突的现有映射，并把恢复日志先写入磁盘。
-                let sources = Set(map.map(\.source))
-                let merged = original.filter { !sources.contains($0.source) } + map
-                journal.append(RecoveryEntry(registryID: device.id, identity: device.identity, original: original, applied: merged))
-                try saveJournal()
-                try write(merged, to: device.service)
-            }
-        } catch {
-            let failure = error
-            do { try restore() } catch { throw ClickError(L10n.format("%@ Recovery also failed: %@", failure.localizedDescription, error.localizedDescription)) }
-            throw failure
-        }
     }
 }

@@ -1,0 +1,79 @@
+#pragma once
+
+// (C) Copyright Takayama Fumihiko 2020.
+// Distributed under the Boost Software License, Version 1.0.
+// (See https://www.boost.org/LICENSE_1_0.txt)
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
+namespace pqrs::karabiner::driverkit::virtual_hid_device_driver::hid_report {
+
+class __attribute__((packed)) keys final {
+public:
+  keys() : keys_{} {}
+
+  const uint16_t (&get_raw_value() const)[32] {
+    return keys_;
+  }
+
+  bool empty() const {
+    for (const auto& k : keys_) {
+      if (k != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void clear() {
+    memset(keys_, 0, sizeof(keys_));
+  }
+
+  void insert(uint16_t key) {
+    if (!exists(key)) {
+      for (auto&& k : keys_) {
+        if (k == 0) {
+          k = key;
+          return;
+        }
+      }
+    }
+  }
+
+  void erase(uint16_t key) {
+    for (auto&& k : keys_) {
+      if (k == key) {
+        k = 0;
+      }
+    }
+  }
+
+  bool exists(uint16_t key) const {
+    for (const auto& k : keys_) {
+      if (k == key) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  std::size_t count() const {
+    std::size_t result = 0;
+    for (const auto& k : keys_) {
+      if (k) {
+        ++result;
+      }
+    }
+    return result;
+  }
+
+  bool operator==(const keys& other) const { return (memcmp(this, &other, sizeof(*this)) == 0); }
+  bool operator!=(const keys& other) const { return !(*this == other); }
+
+private:
+  uint16_t keys_[32];
+};
+} // namespace pqrs::karabiner::driverkit::virtual_hid_device_driver::hid_report
