@@ -11,27 +11,17 @@ struct ContentView: View {
     @AppStorage(L10n.preferenceKey) private var language = AppLanguage.english.rawValue
     var body: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: 208)
+            sidebar.frame(width: 176)
             Divider()
             VStack(spacing: 0) {
                 toolbar
                 Divider()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        if let error = model.error {
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
-                                Text(tr(error)).textSelection(.enabled)
-                                Spacer()
-                            }.padding(12).background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
-                        }
-                        switch model.selection {
-                        case "macros": macros
-                        case "settings": settings
-                        case "permissions": PermissionsView(model: model)
-                        default: mappings
-                        }
-                    }.padding(32).frame(maxWidth: 880, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading)
+                HStack(spacing: 0) {
+                    if ["devices", "macros"].contains(model.selection) {
+                        collectionList.frame(width: 208)
+                        Divider()
+                    }
+                    detail
                 }
                 if !["Ready", "Preview"].contains(model.message) {
                     HStack { Text(tr(model.message)).foregroundStyle(.secondary).lineLimit(2); Spacer() }
@@ -40,10 +30,58 @@ struct ContentView: View {
             }.background(Color(nsColor: .textBackgroundColor))
         }
         .font(.system(size: 13)).tint(.primary)
-        .frame(minWidth: 860, minHeight: 560)
+        .frame(minWidth: 1000, minHeight: 560)
         .environment(\.locale, Locale(identifier: language))
         .id(language)
         .onChange(of: language) { _, _ in NotificationCenter.default.post(name: L10n.didChange, object: nil) }
+    }
+    private var detail: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                if let error = model.error {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.circle").foregroundStyle(.orange)
+                        Text(tr(error)).textSelection(.enabled)
+                        Spacer()
+                    }.padding(12).background(.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
+                }
+                switch model.selection {
+                case "macros": macros
+                case "settings": settings
+                case "permissions": PermissionsView(model: model)
+                default: mappings
+                }
+            }.padding(32).frame(maxWidth: 880, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+    private var collectionList: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    if model.selection == "devices" {
+                        ForEach(model.configuration.profiles) { profile in
+                            item(profile.name, selected: model.selectedProfile == profile.id) {
+                                model.selectedProfile = profile.id
+                            }
+                        }
+                    } else {
+                        ForEach(model.configuration.macros) { macro in
+                            item(macro.name, selected: model.selectedMacro == macro.id) {
+                                model.selectedMacro = macro.id
+                            }
+                        }
+                    }
+                }.padding(10)
+            }
+            Divider()
+            HStack {
+                if model.selection == "devices" { deviceMenu }
+                else {
+                    Button { model.addMacro() } label: { Label(tr("New Macro"), systemImage: "plus") }
+                }
+                Spacer(minLength: 0)
+            }.padding(12)
+        }.background(Color(nsColor: .controlBackgroundColor))
     }
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -52,21 +90,6 @@ struct ContentView: View {
                 Text("Click").font(.system(size: 17, weight: .semibold))
             }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 27)
             navigation("devices", "Mappings", "keyboard")
-            if model.selection == "devices" {
-                HStack {
-                    Text(tr("Devices")).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-                    Spacer()
-                    deviceMenu.labelStyle(.iconOnly)
-                }.padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 10)
-                ScrollView {
-                    VStack(spacing: 3) {
-                        ForEach(model.configuration.profiles) { profile in
-                            item(profile.name, selected: model.selectedProfile == profile.id) { model.selectedProfile = profile.id }
-                        }
-                    }.padding(.leading, 20).padding(.trailing, 10)
-                }.frame(maxHeight: min(CGFloat(model.configuration.profiles.count) * 60, 240))
-            }
-            Divider().padding(.horizontal, 20).padding(.vertical, 14)
             navigation("macros", "Macros", "list.bullet.rectangle")
             Spacer(minLength: 12)
             navigation("permissions", "Permissions", "lock.shield")
@@ -92,7 +115,7 @@ struct ContentView: View {
         Button {
             model.selection = key
             if model.selectedProfile == nil { model.selectedProfile = model.configuration.profiles.first?.id }
-            if key == "macros" { model.selectedMacro = nil }
+            if model.selectedMacro == nil { model.selectedMacro = model.configuration.macros.first?.id }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon).font(.system(size: 14)).frame(width: 20)
@@ -161,41 +184,18 @@ struct ContentView: View {
         }.onAppear { if model.selectedProfile == nil { model.selectedProfile = model.configuration.profiles.first?.id } }
     }
     private var macros: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack {
-                if model.selectedMacro != nil {
-                    Button { model.selectedMacro = nil } label: {
-                        Label(tr("All Macros"), systemImage: "chevron.left")
-                    }.buttonStyle(.plain)
-                } else {
-                    Text(tr("Macros")).font(.system(size: 24, weight: .semibold))
-                }
-                Spacer()
-                Button { model.addMacro() } label: { Label(tr("New Macro"), systemImage: "plus") }
-            }
+        Group {
             if let index = model.configuration.macros.firstIndex(where: { $0.id == model.selectedMacro }) {
                 MacroEditor(macro: $model.configuration.macros[index], demo: model.demo,
                     run: {
                         do { try model.configuration.validate(); model.runner.run(model.configuration.macros[index]) }
                         catch { model.error = error.localizedDescription }
                     }, delete: { model.deleteMacro(model.configuration.macros[index].id) })
-            } else if model.configuration.macros.isEmpty {
-                Text(tr("No macros")).foregroundStyle(.secondary).padding(.vertical, 24)
             } else {
-                VStack(spacing: 0) {
-                    ForEach(model.configuration.macros) { macro in
-                        Button { model.selectedMacro = macro.id } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "list.bullet.rectangle").foregroundStyle(.secondary)
-                                Text(macro.name).fontWeight(.medium).multilineTextAlignment(.leading)
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(.secondary)
-                            }.padding(.horizontal, 12).frame(minHeight: 52).contentShape(Rectangle())
-                        }.buttonStyle(.plain)
-                        Divider()
-                    }
-                }
+                Text(tr("No macros")).foregroundStyle(.secondary).padding(.vertical, 24)
             }
+        }.onAppear {
+            if model.selectedMacro == nil { model.selectedMacro = model.configuration.macros.first?.id }
         }
     }
     private var settings: some View {

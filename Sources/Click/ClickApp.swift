@@ -62,9 +62,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     @objc func showWindow() {
         if window == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 720), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.title = "Click"; window.titlebarAppearsTransparent = true
-            window.minSize = NSSize(width: 860, height: 560); window.isReleasedWhenClosed = false
+            window.minSize = NSSize(width: 1000, height: 560); window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: ContentView(model: model))
             window.delegate = self; window.center(); self.window = window
         }
