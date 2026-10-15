@@ -1,16 +1,21 @@
 import AppKit
 
-/// A monochrome switch housing and cross-shaped stem for small UI surfaces.
+/// A small, monochrome version of the floating switch mark.
 enum SwitchSymbol {
     static let image: NSImage = {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
             NSColor.labelColor.setStroke()
-            let housing = NSBezierPath(roundedRect: NSRect(x: 2.5, y: 2.5, width: 13, height: 13), xRadius: 3, yRadius: 3)
-            housing.lineWidth = 1.5; housing.stroke()
-            let stem = NSBezierPath()
-            stem.move(to: NSPoint(x: 6, y: 9)); stem.line(to: NSPoint(x: 12, y: 9))
-            stem.move(to: NSPoint(x: 9, y: 6)); stem.line(to: NSPoint(x: 9, y: 12))
-            stem.lineWidth = 2; stem.lineCapStyle = .square; stem.stroke()
+            let cap = NSBezierPath()
+            cap.move(to: NSPoint(x: 9, y: 16))
+            cap.line(to: NSPoint(x: 16, y: 11.5))
+            cap.line(to: NSPoint(x: 9, y: 7))
+            cap.line(to: NSPoint(x: 2, y: 11.5)); cap.close()
+            cap.lineWidth = 1.5; cap.lineJoinStyle = .round; cap.stroke()
+            let contact = NSBezierPath()
+            contact.move(to: NSPoint(x: 2, y: 6.5))
+            contact.line(to: NSPoint(x: 9, y: 2))
+            contact.line(to: NSPoint(x: 16, y: 6.5))
+            contact.lineWidth = 1.5; contact.lineCapStyle = .round; contact.lineJoinStyle = .round; contact.stroke()
             return true
         }
         image.isTemplate = true
