@@ -197,7 +197,9 @@ struct ContentView: View {
                 }
                 if model.loginStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
             }
-            settingsSection("Keyboard Service") {
+            settingsSection("Input") {
+                DriverSettings(installer: model.driverInstaller, demo: model.demo)
+                Divider()
                 settingsRow("Keyboard Service") {
                     Toggle(tr("Keyboard Service"), isOn: Binding(get: { model.serviceStatus == .enabled || model.serviceStatus == .requiresApproval }, set: { model.setService($0) }))
                         .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(model.demo)
@@ -405,6 +407,59 @@ struct StepEditor: View {
             TextEditor(text: $step.value).font(.body).frame(minHeight: 76).padding(6)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(.primary.opacity(0.12)))
                 .accessibilityLabel(tr("Text"))
+        }
+    }
+}
+
+
+private struct DriverSettings: View {
+    @ObservedObject var installer: DriverInstaller
+    let demo: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(tr("Virtual HID Driver"))
+                Spacer()
+                Text(tr(installer.packageStatus) + (installer.version.map { " · " + $0 } ?? "")).foregroundStyle(.secondary)
+                if installer.version == nil {
+                    Button(tr("Install…")) { installer.install() }.disabled(installer.busy || demo)
+                } else {
+                    Menu {
+                        Button(tr("Install 8.6.0…")) { installer.install() }
+                        Button(tr("Official download")) { NSWorkspace.shared.open(DriverPackage.releaseURL) }
+                    } label: { Image(systemName: "ellipsis") }
+                    .menuStyle(.borderlessButton).fixedSize().disabled(installer.busy || demo)
+                    .accessibilityLabel(tr("Driver options"))
+                }
+            }.frame(minHeight: 46)
+            if installer.supported {
+                HStack {
+                    Text(tr("Driver extension")); Spacer()
+                    if installer.extensionActive { Text(tr("Active")).foregroundStyle(.secondary) }
+                    else { Button(tr("Activate…")) { installer.activate() }.disabled(installer.busy || demo) }
+                }.frame(minHeight: 46)
+                HStack {
+                    Text(tr("Driver service")); Spacer()
+                    if installer.serviceAvailable { Text(tr("Running")).foregroundStyle(.secondary) }
+                    else if installer.serviceStatus == .requiresApproval {
+                        Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() }.disabled(demo)
+                    } else { Button(tr("Enable…")) { installer.enableService() }.disabled(installer.busy || demo) }
+                }.frame(minHeight: 46)
+            }
+            if let activity = installer.activity {
+                HStack {
+                    if installer.busy { ProgressView().controlSize(.small) }
+                    Text(tr(activity)).foregroundStyle(.secondary)
+                    if installer.activity == "Downloading driver…" { Button(tr("Cancel")) { installer.cancelDownload() } }
+                }.padding(.vertical, 8)
+            }
+            if let error = installer.error {
+                HStack(alignment: .top) {
+                    Text(tr(error)).foregroundStyle(.red).textSelection(.enabled)
+                    Spacer()
+                    IconButton("Dismiss", icon: "xmark") { installer.error = nil }
+                }.padding(.vertical, 8)
+            }
         }
     }
 }

@@ -14,7 +14,7 @@ A small native macOS app for per-device key mappings and keyboard macros. Runs i
 - **Background operation.** Close the window and keep your mappings running. Pause, cancel a macro, or quit from the menu bar.
 - **Launch at login.** Enable it in Settings. macOS may require approval in Login Items.
 - **Native editor.** A compact sidebar, mapping rows, and an ordered macro editor. Language changes update the interface and menus without discarding drafts.
-- **Local only.** No account, network service, shell execution, analytics, or keyboard history.
+- **Local operation.** No account, analytics, or keyboard history. Driver installation downloads an official package only when requested; no settings or keystrokes are uploaded.
 
 ## Install
 
@@ -22,12 +22,13 @@ Requires **macOS 14+**. The interface defaults to **English**. Switch between En
 
 Download an architecture-matching app from [Releases](https://github.com/MrCroxx/click/releases), unzip it, and move **Click.app** to Applications before granting permissions or enabling launch at login. Builds are ad-hoc signed, not notarized; building from source is also supported.
 
-1. Install and activate the official [Karabiner DriverKit VirtualHIDDevice](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/releases) package **8.5.0 or 8.6.0** (client protocol 7). Karabiner-Elements itself is not required.
-2. In Click Settings, enable **Keyboard Service**, approve it in macOS Login Items, and grant **Accessibility** and **Input Monitoring** when requested.
-3. Select **Add device**, choose a connected keyboard, and add mappings.
-4. For a macro, first create its steps in the macro editor, then assign it to a key.
-5. Enable the device profile and click **Save**.
-6. Enable **Launch at login** if desired.
+1. Open **Settings → Input → Virtual HID Driver → Install…**. Click downloads the official signed **8.6.0** package, verifies its pinned SHA-256 and installer signature, and opens macOS Installer. Complete installation there. Existing **8.5.0/8.6.0** installations are supported; there is no automatic replacement.
+2. Use **Activate…** if the driver extension is inactive, then **Enable…** beside **Driver service** if needed. Approve macOS prompts and restart if requested. An already-running shared driver service is reused. Karabiner-Elements itself is not required.
+3. In Click Settings, enable **Keyboard Service**, approve it in macOS Login Items, and grant **Accessibility** and **Input Monitoring** when requested.
+4. Select **Add device**, choose a connected keyboard, and add mappings.
+5. For a macro, first create its steps in the macro editor, then assign it to a key.
+6. Enable the device profile and click **Save**.
+7. Enable **Launch at login** if desired.
 
 Adding a device starts with mappings disabled. Saving applies only enabled profiles. Pausing restores the previous mappings; starting resumes the last saved configuration. Closing the window keeps the service running. Quitting restores mappings and stops it.
 
@@ -79,6 +80,8 @@ See [Input pipeline](docs/input-pipeline.md) for the privilege boundary, failure
 ## Development
 
 `ClickCore` contains the configuration schema, key catalog, raw HID router, and legacy restoration logic. `Click` contains the SwiftUI editor, AppKit menu bar, XPC client, macro executor, and login integration. `ClickDaemon` captures raw HID and uses the official pqrs virtual HID client through a small C++ adapter. CI runs tests and uploads an app archive.
+
+Driver installation uses Apple’s Installer and the signed pqrs activation manager. Click does not collect administrator passwords or run an elevated shell. Service registration uses `SMAppService`; approving the extension and background items remains a macOS step. Opening Installer is not reported as successful installation. Driver replacement pauses Click mappings first. The shared driver service is not unregistered when Click mappings are paused.
 
 Translations live in `Sources/ClickCore/Resources/Translations.json`. Add a language to `AppLanguage` and provide the same keys and format arguments; localization tests check coverage. The app bundle includes these resources. Native system dialogs use macOS language preferences.
 

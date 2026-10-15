@@ -44,8 +44,13 @@ that every device or application accepts every output.
 
 The virtual device must report ready before seizure. Driver package 8.5.0 and
 8.6.0 both use client protocol 7; other protocols are rejected by the client.
-The driver is installed separately from the official pqrs distribution. Click
-neither bundles the driver binary nor needs Karabiner-Elements configuration.
+Click Settings can download the pinned official 8.6.0 package (SHA-256 and
+Developer ID Installer verification), open Apple's Installer, invoke the signed
+pqrs activation manager, and register the shared daemon using its bundled
+`SMAppService` plist. Existing 8.5.0/8.6.0 installations and a running shared
+service are reused. Installation, extension activation and the daemon's running
+state are checked separately; opening Installer is not installation success.
+Click neither bundles the driver binary nor needs Karabiner-Elements configuration.
 Other remappers must release the keyboards assigned to Click.
 
 ## Failure handling and limits
@@ -117,3 +122,26 @@ standard function-key intent with a held Fn + F-key mapping, following
 Physical Fn/Globe and function-key behavior still require hardware validation.
 Stopping Karabiner-Elements must not remove the shared DriverKit virtual HID
 driver and its service, which Click also needs.
+
+## Driver setup verification
+
+The package digest is pinned in `DriverPackage.swift`; it is not obtained from a
+mutable latest-release endpoint at runtime. The package is opened only after its
+size, SHA-256 and pqrs Developer ID Installer signature match. Activation and
+service registration validate the installed app's Apple signing chain, team and
+identifier. Registration does not unregister another app's shared service.
+No privileged password or shell is exposed through Click. Installing/upgrading
+through the system Installer and accepting extension/background approval still
+requires user interaction. A future incompatible version is shown explicitly and
+is never silently replaced.
+
+Package verification can be tested without installation:
+
+```sh
+CLICK_DRIVER_TEST_PACKAGE=/path/to/Karabiner-DriverKit-VirtualHIDDevice-8.6.0.pkg swift test
+```
+
+Without that fixture the live-package verification test is skipped; rejection,
+version compatibility, signature rejection and other tests still run. Fresh
+installation, activation approval, reboot and service takeover require separate
+manual validation.

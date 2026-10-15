@@ -21,6 +21,7 @@ final class AppModel: ObservableObject {
     private let store: ConfigurationStore
     private var hardware: Hardware?
     private let daemon = DaemonClient()
+    let driverInstaller = DriverInstaller()
     lazy var runner = MacroRunner(shortcutOutput: { [weak self] shortcut in
         guard let self else { throw CancellationError() }; try await self.daemon.shortcut(shortcut)
     })
@@ -45,7 +46,9 @@ final class AppModel: ObservableObject {
         daemon.onFailure = { [weak self] message in
             self?.pause(); self?.error = message
         }
+        driverInstaller.prepareChange = { [weak self] in try self?.pauseThrowing() }
         if demo { seedDemo(); return }
+        driverInstaller.refresh()
         do {
             hardware = try Hardware(directory: directory)
             try hardware?.restore()
@@ -88,6 +91,7 @@ final class AppModel: ObservableObject {
     func refresh() {
         accessibility = AXIsProcessTrusted(); inputMonitoring = CGPreflightListenEventAccess()
         loginStatus = SMAppService.mainApp.status
+        driverInstaller.refresh()
         refreshDevices()
         serviceStatus = SMAppService.daemon(plistName: ClickService.plist).status
         if running && !accessibility && !active.macros.isEmpty { runner.cancel() }
