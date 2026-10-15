@@ -49,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         appMenu.addItem(withTitle: L10n.text("Open Click"), action: #selector(showWindow), keyEquivalent: ",").target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: L10n.text("Quit Click"), action: #selector(quit), keyEquivalent: "q").target = self
+        let fileItem = NSMenuItem(); bar.addItem(fileItem)
+        let file = NSMenu(title: L10n.text("File")); fileItem.submenu = file
+        file.addItem(withTitle: L10n.text("Close Window"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let editItem = NSMenuItem(); bar.addItem(editItem)
         let edit = NSMenu(title: L10n.text("Edit")); editItem.submenu = edit
         for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
