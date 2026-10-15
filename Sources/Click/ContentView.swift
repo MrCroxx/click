@@ -84,6 +84,16 @@ struct ContentView: View {
                 Circle().fill(model.running ? Color.green.opacity(0.8) : Color.secondary.opacity(0.5)).frame(width: 5, height: 5)
                 Text(tr(model.demo ? "Preview" : model.running ? "Running" : "Paused")).foregroundStyle(.secondary)
                 Spacer()
+                Button { NSApp.terminate(nil) } label: {
+                    Image(systemName: "power")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.red)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(tr("Quit Click"))
+                .accessibilityLabel(tr("Quit Click"))
             }.font(.system(size: 11)).padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 18)
         }.background(Color(nsColor: .windowBackgroundColor))
     }
