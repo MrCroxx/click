@@ -24,7 +24,7 @@ Download an architecture-matching app from [Releases](https://github.com/MrCroxx
 
 Use **Permissions** in the sidebar to check Accessibility, Input Monitoring and background-item registration, and open their System Settings pages. Status refreshes when you return to Click; **Check Again** refreshes it manually.
 
-Settings use a single grouped list for appearance, startup, keyboard services, the driver, and configuration. Key menus group supported keys into letters, numbers, punctuation, editing, navigation, function keys, and modifiers.
+Settings use a single grouped list for general preferences, keyboard services, the driver, and configuration. Key menus group supported keys into letters, numbers, punctuation, editing, navigation, function keys, and modifiers.
 
 Input Monitoring uses the HID permission check and request. If Click is absent from the system list after requesting, **Show Click in Finder** locates the running app so you can add it with **+** in System Settings.
 

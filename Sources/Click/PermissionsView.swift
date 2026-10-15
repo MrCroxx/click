@@ -42,11 +42,7 @@ struct PermissionsView: View {
                         status: status(model.serviceStatus), ready: model.serviceStatus == .enabled) {
                         SMAppService.openSystemSettingsLoginItems()
                     }
-                    Divider()
-                    row("Launch at login", detail: "Optional. Opens Click when you sign in.",
-                        status: status(model.loginStatus), ready: model.loginStatus == .enabled) {
-                        SMAppService.openSystemSettingsLoginItems()
-                    }
+
                 }
             }
         }

@@ -186,14 +186,13 @@ struct ContentView: View {
     private var settings: some View {
         VStack(alignment: .leading, spacing: 28) {
             Text(tr("Settings")).font(.system(size: 24, weight: .semibold))
-            settingsSection("Appearance") {
+            settingsSection("General") {
                 settingsRow("Language") {
                     Picker(tr("Language"), selection: $language) {
                         ForEach(AppLanguage.allCases) { Text($0.name).tag($0.rawValue) }
                     }.labelsHidden().frame(width: 170)
                 }
-            }
-            settingsSection("Startup") {
+                Divider()
                 settingsRow("Launch at login") {
                     if model.loginStatus == .requiresApproval {
                         Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() }.disabled(model.demo)
