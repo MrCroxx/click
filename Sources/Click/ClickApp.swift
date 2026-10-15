@@ -32,22 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item?.button?.image = SwitchSymbol.image
-        installStatusMenu()
+        item?.button?.target = self
+        item?.button?.action = #selector(showWindow)
+        item?.button?.setAccessibilityLabel("Click")
         NotificationCenter.default.addObserver(forName: L10n.didChange, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.installMenu(); self?.installStatusMenu() }
+            Task { @MainActor in self?.installMenu() }
         }
         let event = NSAppleEventManager.shared().currentAppleEvent
         let launchedAtLogin = event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         if !launchedAtLogin && !CommandLine.arguments.contains("--background") { showWindow() }
-    }
-    private func installStatusMenu() {
-        let menu = NSMenu()
-        menu.addItem(withTitle: L10n.text("Open Click"), action: #selector(showWindow), keyEquivalent: ",").target = self
-        menu.addItem(withTitle: L10n.text("Pause / Resume"), action: #selector(toggle), keyEquivalent: "").target = self
-        menu.addItem(withTitle: L10n.text("Stop Macro"), action: #selector(cancelMacro), keyEquivalent: "").target = self
-        menu.addItem(.separator())
-        menu.addItem(withTitle: L10n.text("Quit Click"), action: #selector(quit), keyEquivalent: "q").target = self
-        item?.menu = menu
     }
     private func installMenu() {
         let bar = NSMenu()
@@ -56,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         appMenu.addItem(withTitle: L10n.text("Open Click"), action: #selector(showWindow), keyEquivalent: ",").target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: L10n.text("Quit Click"), action: #selector(quit), keyEquivalent: "q").target = self
+        let fileItem = NSMenuItem(); bar.addItem(fileItem)
+        let file = NSMenu(title: L10n.text("File")); fileItem.submenu = file
+        file.addItem(withTitle: L10n.text("Close Window"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let editItem = NSMenuItem(); bar.addItem(editItem)
         let edit = NSMenu(title: L10n.text("Edit")); editItem.submenu = edit
         for (title, action, key) in [("Undo", "undo:", "z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
@@ -82,7 +78,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if model.shutdown() { return .terminateNow }
         showWindow(); return .terminateCancel
     }
-    @objc private func toggle() { model.toggleRunning() }
-    @objc private func cancelMacro() { model.runner.cancel() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

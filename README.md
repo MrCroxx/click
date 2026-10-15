@@ -11,7 +11,7 @@ A small native macOS app for per-device key mappings and keyboard macros. Runs i
 - **Per-device mappings.** Give each keyboard its own layout. Remap a key to another key or a reusable macro.
 - **Ordered macros.** Switch to an application, wait, send a shortcut, or type Unicode text. Reorder steps in the editor.
 - **Load and export.** Versioned JSON files contain devices, mappings, and macros. Valid changes are saved automatically and applied after a short debounce.
-- **Background operation.** Close the window and keep your mappings running. Pause, cancel a macro, or quit from the menu bar.
+- **Background operation.** Close the window and keep your mappings running. Click the menu bar icon to reopen the window. Pause or cancel a macro from the window’s options menu; quit with the red power button at the bottom of the sidebar.
 - **Launch at login.** Enable it in Settings. macOS may require approval in Login Items.
 - **Native editor.** A compact sidebar, mapping rows, and an ordered macro editor. Language changes update the interface and menus without discarding edits.
 - **Local operation.** No account, analytics, or keyboard history. Driver installation downloads an official package only when requested; no settings or keystrokes are uploaded.
@@ -36,7 +36,7 @@ Input Monitoring uses the HID permission check and request. If Click is absent f
 6. Enable the device profile. Changes save automatically and apply immediately after a short debounce.
 7. Enable **Launch at login** if desired.
 
-Adding a device starts with mappings disabled. Changes persist before hardware application. If the service fails, configuration stays saved and mappings pause with an error. Only enabled profiles are applied. Pausing restores the previous mappings; resuming reapplies the current valid configuration. Closing the window keeps the service running. Quitting restores mappings and stops it.
+Adding a device starts with mappings disabled. Changes persist before hardware application. If the service fails, configuration stays saved and mappings pause with an error. Only enabled profiles are applied. Pausing restores the previous mappings; resuming reapplies the current valid configuration. If keys are held during startup, Click waits and retries automatically; pausing or changing the configuration cancels the pending attempt. Closing the window keeps the service running. Quitting restores mappings and stops it.
 
 ## Build
 
