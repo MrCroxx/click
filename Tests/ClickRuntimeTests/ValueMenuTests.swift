@@ -4,6 +4,9 @@ import XCTest
 
 final class ValueMenuTests: XCTestCase {
     @MainActor func testNativeMenuDispatchesNestedSelectionAndUpdatedActions() {
+        // swift test has no application entry point. NSMenu dispatches actions
+        // through NSApp, so initialize it explicitly on the main actor.
+        _ = NSApplication.shared
         let button = NSPopUpButton(frame: .zero, pullsDown: true)
         let coordinator = ValueMenu.Coordinator()
         var selection = "Caps Lock"
@@ -22,6 +25,9 @@ final class ValueMenuTests: XCTestCase {
         XCTAssertEqual(selection, "Macro")
     }
     @MainActor func testRefreshDoesNotDismissTrackingMenuOrReleaseItsAction() async {
+        // swift test has no application entry point. NSMenu dispatches actions
+        // through NSApp, so initialize it explicitly on the main actor.
+        _ = NSApplication.shared
         let button = NSPopUpButton(frame: .zero, pullsDown: true)
         let coordinator = ValueMenu.Coordinator()
         var selected = false
