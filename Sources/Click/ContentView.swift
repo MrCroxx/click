@@ -243,11 +243,12 @@ struct ContentView: View {
 struct IconButton: View {
     let title: String
     let icon: String
+    let destructive: Bool
     let action: () -> Void
-    init(_ title: String, icon: String, action: @escaping () -> Void) { self.title = title; self.icon = icon; self.action = action }
+    init(_ title: String, icon: String, destructive: Bool = false, action: @escaping () -> Void) { self.title = title; self.icon = icon; self.destructive = destructive; self.action = action }
     var body: some View {
-        Button(action: action) { Image(systemName: icon).frame(width: 20, height: 20).contentShape(Rectangle()) }
-            .buttonStyle(.plain).foregroundStyle(.secondary).help(tr(title)).accessibilityLabel(tr(title))
+        Button(role: destructive ? .destructive : nil, action: action) { Image(systemName: icon).frame(width: 20, height: 20).contentShape(Rectangle()) }
+            .buttonStyle(.plain).foregroundStyle(destructive ? Color.red : Color.secondary).help(tr(title)).accessibilityLabel(tr(title))
     }
 }
 
@@ -288,7 +289,7 @@ struct DeviceEditor: View {
                                 ForEach(macros) { macro in Button(macro.name) { binding.macroID = macro.id } }
                             }.frame(maxWidth: .infinity)
                         }
-                        IconButton("Remove Mapping", icon: "minus") { profile.bindings.removeAll { $0.id == binding.id } }
+                        IconButton("Remove Mapping", icon: "trash", destructive: true) { profile.bindings.removeAll { $0.id == binding.id } }
                     }.padding(.horizontal, 12).frame(height: 56)
                     Divider()
                 }
@@ -364,7 +365,7 @@ struct MacroEditor: View {
                                 Spacer()
                                 IconButton("Move Up", icon: "chevron.up") { macro.steps.swapAt(index, index - 1) }.disabled(index == 0)
                                 IconButton("Move Down", icon: "chevron.down") { macro.steps.swapAt(index, index + 1) }.disabled(index == macro.steps.count - 1)
-                                IconButton("Remove Step", icon: "minus") { macro.steps.removeAll { $0.id == step.id } }
+                                IconButton("Remove Step", icon: "trash", destructive: true) { macro.steps.removeAll { $0.id == step.id } }
                             }
                             StepEditor(step: $macro.steps[index])
                         }
