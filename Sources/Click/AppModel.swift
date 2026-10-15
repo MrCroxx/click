@@ -239,6 +239,6 @@ final class AppModel: ObservableObject {
         guard !configuration.profiles.flatMap(\.bindings).contains(where: { $0.kind == .macro && $0.macroID == id }) else {
             error = "This macro is assigned to a device. Remove its mappings first."; return
         }
-        configuration.macros.removeAll { $0.id == id }; selectedMacro = nil
+        configuration.macros.removeAll { $0.id == id }; selectedMacro = configuration.macros.first?.id
     }
 }
