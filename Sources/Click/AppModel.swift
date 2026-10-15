@@ -73,7 +73,10 @@ final class AppModel: ObservableObject {
             }
         }
         daemon.onFailure = { [weak self] message in
-            self?.pause(); self?.error = message
+            guard let self else { return }
+            self.pause()
+            if message == KeyboardStartRecovery.heldKeys { self.updater.submit(self.configuration) }
+            else { self.error = message }
         }
         driverInstaller.prepareChange = { [weak self] in self?.updater.cancel(); try self?.pauseThrowing() }
         if demo { seedDemo(); readyForEdits = true; return }
@@ -142,7 +145,16 @@ final class AppModel: ObservableObject {
             throw ClickError("Enable Keyboard Service in Settings and approve it in Login Items.")
         }
         let token = UUID(); operation = token
-        try await daemon.start(active)
+        try await KeyboardStartRecovery.run(isCurrent: { self.operation == token }, waiting: {
+            self.running = false
+            self.error = nil
+            self.message = "Waiting for keys to be released…"
+        }, start: {
+            guard SMAppService.daemon(plistName: ClickService.plist).status == .enabled else {
+                throw ClickError("Enable Keyboard Service in Settings and approve it in Login Items.")
+            }
+            try await self.daemon.start(self.active)
+        })
         guard operation == token else { throw CancellationError() }
         running = true
     }
