@@ -3,6 +3,14 @@ import XCTest
 
 final class HIDInterfacePolicyTests: XCTestCase {
     let keyboard = DeviceIdentity(vendor: 1, product: 2, location: 3)
+    func testClearingKeyboardErrorDoesNotPauseCapture() {
+        for usage: UInt32 in 1...3 {
+            XCTAssertFalse(HIDInterfacePolicy.reportsKeyboardError(page: 7, usage: usage, value: 0))
+            XCTAssertTrue(HIDInterfacePolicy.reportsKeyboardError(page: 7, usage: usage, value: 1))
+        }
+        XCTAssertFalse(HIDInterfacePolicy.reportsKeyboardError(page: 0xff, usage: 3, value: 1))
+        XCTAssertFalse(HIDInterfacePolicy.reportsKeyboardError(page: 7, usage: 111, value: 1))
+    }
     func testBuiltInAppleKeyboardWithoutUSBVendorID() {
         XCTAssertFalse(HIDInterfacePolicy.isKeyValue(vendor: 0, isBuiltInApple: true, page: 0xff00, usage: 6, reportSize: 512))
         XCTAssertTrue(HIDInterfacePolicy.isKeyValue(vendor: 0, page: 0xff00, usage: 6, reportSize: 512))

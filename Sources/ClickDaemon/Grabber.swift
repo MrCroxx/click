@@ -129,9 +129,13 @@ final class Grabber {
             let element = IOHIDValueGetElement(value)
             let usage = IOHIDElementGetUsage(element), page = IOHIDElementGetUsagePage(element)
             guard usage > 0, usage <= UInt16.max else { continue }
-            if page == 7 && usage <= 3 { fail("Keyboard reported a rollover error. Mappings paused."); return }
+            let integerValue = IOHIDValueGetIntegerValue(value)
+            if HIDInterfacePolicy.reportsKeyboardError(page: page, usage: usage, value: integerValue) {
+                fail("Keyboard reported a rollover error. Mappings paused."); return
+            }
+            if page == 7 && usage <= 3 { continue }
             let key = RawInputRouter.Key(page: page, usage: UInt16(usage))
-            let trigger = router.input(device: id, identity: identity, key: key, down: IOHIDValueGetIntegerValue(value) != 0)
+            let trigger = router.input(device: id, identity: identity, key: key, down: integerValue != 0)
             guard publish() else { return }
             if let trigger { onTrigger(trigger) }
         }

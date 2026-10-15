@@ -4,6 +4,9 @@ import Foundation
 /// interfaces whose entire input can be forwarded are eligible for seizure.
 public enum HIDInterfacePolicy {
     public static let pages: [UInt32] = [0x00ff, 0xff01, 7, 12, 1]
+    public static func reportsKeyboardError(page: UInt32, usage: UInt32, value: Int) -> Bool {
+        page == 7 && (1...3).contains(usage) && value != 0
+    }
     /// IOHID also exposes array containers and an opaque 64-byte Apple report.
     /// These are not individual key values. Keep unknown interfaces rejected.
     public static func isKeyValue(vendor: Int, isBuiltInApple: Bool = false, page: UInt32, usage: UInt32, reportSize: UInt32) -> Bool {
