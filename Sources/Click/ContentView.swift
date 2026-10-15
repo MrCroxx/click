@@ -283,17 +283,16 @@ struct DeviceEditor: View {
                 ForEach($profile.bindings) { $binding in
                     HStack(spacing: 8) {
                         KeyPicker(selection: $binding.source).frame(width: 160)
-                        ValueMenu(title: tr(binding.kind == .key ? "Key" : "Macro")) {
-                            Button(tr("Key")) { binding.kind = .key }
-                            Button(tr("Macro")) { binding.kind = .macro; if binding.macroID == nil { binding.macroID = macros.first?.id } }
-                        }.frame(width: 100)
+                        ValueMenu(title: tr(binding.kind == .key ? "Key" : "Macro"), entries: [
+                            .init(title: tr("Key"), action: { binding.kind = .key }),
+                            .init(title: tr("Macro"), action: { binding.kind = .macro; if binding.macroID == nil { binding.macroID = macros.first?.id } })
+                        ]).frame(width: 100)
                         if binding.kind == .key {
                             KeyPicker(selection: $binding.destinationSelection, allowsFn: true).frame(maxWidth: .infinity)
                         }
                         else {
-                            ValueMenu(title: macros.first(where: { $0.id == binding.macroID })?.name ?? tr("Choose a macro")) {
-                                ForEach(macros) { macro in Button(macro.name) { binding.macroID = macro.id } }
-                            }.frame(maxWidth: .infinity)
+                            ValueMenu(title: macros.first(where: { $0.id == binding.macroID })?.name ?? tr("Choose a macro"),
+                                entries: macros.map { macro in .init(title: macro.name, action: { binding.macroID = macro.id }) }).frame(maxWidth: .infinity)
                         }
                         IconButton("Remove Mapping", icon: "trash", destructive: true) { profile.bindings.removeAll { $0.id == binding.id } }
                     }.padding(.horizontal, 12).frame(height: 56)
@@ -314,20 +313,59 @@ struct DeviceEditor: View {
     }
 }
 
-struct ValueMenu<Content: View>: View {
+struct ValueMenu: NSViewRepresentable {
+    struct Entry {
+        let title: String
+        var selected = false
+        var children: [Entry] = []
+        var action: (() -> Void)? = nil
+    }
     let title: String
-    @ViewBuilder let content: () -> Content
-    var body: some View {
-        Menu(content: content) {
-            HStack {
-                Text(title).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
-            }.padding(.horizontal, 10).frame(height: 30)
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.10)))
-                .contentShape(RoundedRectangle(cornerRadius: 6))
-        }.menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+    let entries: [Entry]
+
+    final class Action: NSObject {
+        let perform: () -> Void
+        init(_ perform: @escaping () -> Void) { self.perform = perform }
+        @objc func invoke(_ sender: NSMenuItem) { perform() }
+    }
+    final class Coordinator { var actions: [Action] = [] }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: true)
+        button.bezelStyle = .rounded
+        button.alignment = .left
+        button.font = .systemFont(ofSize: 13)
+        button.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return button
+    }
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        update(button, coordinator: context.coordinator)
+    }
+    func update(_ button: NSPopUpButton, coordinator: Coordinator) {
+        coordinator.actions.removeAll()
+        func menu(_ entries: [Entry]) -> NSMenu {
+            let result = NSMenu()
+            result.autoenablesItems = false
+            for entry in entries {
+                let item = NSMenuItem(title: entry.title, action: nil, keyEquivalent: "")
+                item.state = entry.selected ? .on : .off
+                if !entry.children.isEmpty { item.submenu = menu(entry.children) }
+                if let perform = entry.action {
+                    let action = Action(perform)
+                    coordinator.actions.append(action)
+                    item.target = action; item.action = #selector(Action.invoke(_:))
+                }
+                result.addItem(item)
+            }
+            return result
+        }
+        let result = menu(entries)
+        // A pull-down button displays its first item as the label, but hides it
+        // from the menu. AppKit owns hit testing across the entire control.
+        result.insertItem(withTitle: title, action: nil, keyEquivalent: "", at: 0)
+        button.menu = result
+        button.title = title
+        button.setAccessibilityLabel(title)
     }
 }
 
@@ -335,18 +373,13 @@ struct KeyPicker: View {
     @Binding var selection: Int
     var allowsFn = false
     var body: some View {
-        ValueMenu(title: tr(KeyCatalog.name(selection))) {
-            ForEach(KeyCatalog.groups(allowsFn: allowsFn)) { group in
-                Menu(tr(group.id)) {
-                    ForEach(group.keys) { key in
-                        Button { selection = key.id } label: {
-                            if selection == key.id { Label(tr(key.name), systemImage: "checkmark") }
-                            else { Text(tr(key.name)) }
-                        }
-                    }
-                }
+        ValueMenu(title: tr(KeyCatalog.name(selection)), entries:
+            KeyCatalog.groups(allowsFn: allowsFn).map { group in
+                .init(title: tr(group.id), children: group.keys.map { key in
+                    .init(title: tr(key.name), selected: selection == key.id, action: { selection = key.id })
+                })
             }
-        }.accessibilityLabel(tr("Key") + ": " + tr(KeyCatalog.name(selection)))
+        ).frame(height: 30)
     }
 }
 
