@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         installMenu()
         NSApp.setActivationPolicy(.accessory)
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item?.button?.image = NSImage(systemSymbolName: "cursorarrow.click.2", accessibilityDescription: "Click")
+        item?.button?.image = SwitchSymbol.image
         installStatusMenu()
         NotificationCenter.default.addObserver(forName: L10n.didChange, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.installMenu(); self?.installStatusMenu() }

@@ -49,7 +49,7 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 9) {
-                Image(systemName: "cursorarrow.click").font(.system(size: 15, weight: .medium))
+                Image(nsImage: SwitchSymbol.image).accessibilityLabel("Click")
                 Text("Click").font(.system(size: 17, weight: .semibold))
             }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 27)
             navigation("devices", "Mappings", "keyboard")
