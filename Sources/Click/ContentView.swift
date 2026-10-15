@@ -281,10 +281,6 @@ struct DeviceEditor: View {
                         }.frame(width: 100)
                         if binding.kind == .key {
                             KeyPicker(selection: $binding.destinationSelection, allowsFn: true).frame(maxWidth: .infinity)
-                            if (binding.destinationPage ?? 7) == 7 {
-                                Toggle("Fn", isOn: Binding(get: { binding.fn ?? false }, set: { binding.fn = $0 ? true : nil }))
-                                    .toggleStyle(.checkbox).fixedSize()
-                            }
                         }
                         else {
                             ValueMenu(title: macros.first(where: { $0.id == binding.macroID })?.name ?? tr("Choose a macro")) {
