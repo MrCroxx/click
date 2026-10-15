@@ -188,7 +188,18 @@
     "The installed driver signature could not be verified. Reinstall the official driver.": "The installed driver signature could not be verified. Reinstall the official driver.",
     "The driver installer signature could not be verified.": "The driver installer signature could not be verified.",
     "Unable to create a temporary file.": "Unable to create a temporary file.",
-    "The operation timed out. Check System Settings and try again.": "The operation timed out. Check System Settings and try again."
+    "The operation timed out. Check System Settings and try again.": "The operation timed out. Check System Settings and try again.",
+    "Check Again": "Check Again",
+    "Not granted": "Not granted",
+    "Background Items": "Background Items",
+    "Approval required": "Approval required",
+    "Not enabled": "Not enabled",
+    "Unavailable": "Unavailable",
+    "Unknown": "Unknown",
+    "Allows macro actions to control apps and insert text.": "Allows macro actions to control apps and insert text.",
+    "Checks Click’s access. Keyboard Service access is verified when capture starts.": "Checks Click’s access. Keyboard Service access is verified when capture starts.",
+    "Allows Click’s keyboard service to run in the background.": "Allows Click’s keyboard service to run in the background.",
+    "Optional. Opens Click when you sign in.": "Optional. Opens Click when you sign in."
   },
   "zh-Hans": {
     "Mappings": "按键映射",
@@ -379,6 +390,17 @@
     "The installed driver signature could not be verified. Reinstall the official driver.": "无法验证已安装驱动的签名，请重新安装官方驱动。",
     "The driver installer signature could not be verified.": "无法验证驱动安装包的签名。",
     "Unable to create a temporary file.": "无法创建临时文件。",
-    "The operation timed out. Check System Settings and try again.": "操作超时，请检查系统设置后重试。"
+    "The operation timed out. Check System Settings and try again.": "操作超时，请检查系统设置后重试。",
+    "Check Again": "重新检查",
+    "Not granted": "未授权",
+    "Background Items": "后台项目",
+    "Approval required": "等待批准",
+    "Not enabled": "未启用",
+    "Unavailable": "不可用",
+    "Unknown": "未知",
+    "Allows macro actions to control apps and insert text.": "允许宏操作控制应用和输入文本。",
+    "Checks Click’s access. Keyboard Service access is verified when capture starts.": "检查 Click 的访问权限；键盘服务的权限会在开始接管时验证。",
+    "Allows Click’s keyboard service to run in the background.": "允许 Click 的键盘服务在后台运行。",
+    "Optional. Opens Click when you sign in.": "可选。登录时打开 Click。"
   }
 }

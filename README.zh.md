@@ -22,6 +22,8 @@
 
 从 [Releases](https://github.com/MrCroxx/click/releases) 下载符合 CPU 架构的应用，解压后将 **Click.app** 放到 Applications，再授权和启用登录项。构建采用临时签名，未经过 Apple 公证；也可以从源码构建。
 
+侧栏 **Permissions（权限）** 可检查辅助功能、输入监控和后台项目注册状态，并直达对应系统设置。返回 Click 时自动刷新，也可点击 **Check Again（重新检查）**。
+
 1. 在 **Settings → Input → Virtual HID Driver → Install…** 中安装驱动。Click 下载官方签名的 **8.6.0** 安装包，校验固定 SHA-256 和安装器签名后，打开 macOS 安装器，由你完成安装。已有 **8.5.0/8.6.0** 可以直接使用，不会自动替换。
 2. 驱动扩展尚未激活时点击 **Activate…**，驱动服务未运行时点击 **Driver service** 旁的 **Enable…**。按 macOS 提示批准权限，必要时重启。已有运行中的共享驱动服务会直接复用，不需要 Karabiner-Elements 主程序。
 3. 在 Click 设置中启用**键盘服务**，在 macOS 登录项中批准，并按需授予**辅助功能**与**输入监控**权限。

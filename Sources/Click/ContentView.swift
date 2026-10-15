@@ -29,6 +29,7 @@ struct ContentView: View {
                         switch model.selection {
                         case "macros": macros
                         case "settings": settings
+                        case "permissions": PermissionsView(model: model)
                         default: mappings
                         }
                     }.padding(32).frame(maxWidth: 880, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading)
@@ -78,6 +79,7 @@ struct ContentView: View {
                 }
             } else { Spacer() }
             Spacer(minLength: 12)
+            navigation("permissions", "Permissions", "lock.shield")
             navigation("settings", "Settings", "gearshape")
             HStack(spacing: 7) {
                 Circle().fill(model.running ? Color.green.opacity(0.8) : Color.secondary.opacity(0.5)).frame(width: 5, height: 5)
@@ -119,7 +121,7 @@ struct ContentView: View {
     }
     private var toolbar: some View {
         HStack(spacing: 16) {
-            Text(tr(model.selection == "macros" ? "Macros" : model.selection == "settings" ? "Settings" : "Mappings"))
+            Text(tr(model.selection == "macros" ? "Macros" : model.selection == "settings" ? "Settings" : model.selection == "permissions" ? "Permissions" : "Mappings"))
                 .font(.system(size: 13, weight: .medium))
             Spacer()
             if model.dirty { Circle().fill(.orange.opacity(0.8)).frame(width: 5, height: 5).help(tr("Unsaved changes")) }
@@ -206,11 +208,6 @@ struct ContentView: View {
                 }
                 if model.serviceStatus == .requiresApproval { Button(tr("Open Login Items")) { SMAppService.openSystemSettingsLoginItems() } }
             }
-            settingsSection("Permissions") {
-                permission("Accessibility", granted: model.accessibility) { model.requestAccessibility(); model.openSettings("Privacy_Accessibility") }
-                Divider()
-                permission("Input Monitoring", granted: model.inputMonitoring) { model.requestInputMonitoring(); model.openSettings("Privacy_ListenEvent") }
-            }
             settingsSection("Configuration") {
                 HStack {
                     Button(tr("Import…")) { model.importConfiguration() }
@@ -231,12 +228,7 @@ struct ContentView: View {
     private func settingsRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         HStack { Text(tr(title)); Spacer(); content() }.frame(minHeight: 46)
     }
-    private func permission(_ title: String, granted: Bool, action: @escaping () -> Void) -> some View {
-        settingsRow(title) {
-            if granted { Label(tr("Granted"), systemImage: "checkmark").foregroundStyle(.secondary) }
-            else { Button(tr("Open Settings"), action: action).disabled(model.demo) }
-        }
-    }
+
 }
 
 struct IconButton: View {

@@ -22,6 +22,8 @@ Requires **macOS 14+**. The interface defaults to **English**. Switch between En
 
 Download an architecture-matching app from [Releases](https://github.com/MrCroxx/click/releases), unzip it, and move **Click.app** to Applications before granting permissions or enabling launch at login. Builds are ad-hoc signed, not notarized; building from source is also supported.
 
+Use **Permissions** in the sidebar to check Accessibility, Input Monitoring and background-item registration, and open their System Settings pages. Status refreshes when you return to Click; **Check Again** refreshes it manually.
+
 1. Open **Settings → Input → Virtual HID Driver → Install…**. Click downloads the official signed **8.6.0** package, verifies its pinned SHA-256 and installer signature, and opens macOS Installer. Complete installation there. Existing **8.5.0/8.6.0** installations are supported; there is no automatic replacement.
 2. Use **Activate…** if the driver extension is inactive, then **Enable…** beside **Driver service** if needed. Approve macOS prompts and restart if requested. An already-running shared driver service is reused. Karabiner-Elements itself is not required.
 3. In Click Settings, enable **Keyboard Service**, approve it in macOS Login Items, and grant **Accessibility** and **Input Monitoring** when requested.
