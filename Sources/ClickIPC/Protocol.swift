@@ -6,7 +6,7 @@ public enum ClickService {
 }
 
 @objc public protocol ClickDaemonProtocol {
-    func configure(_ data: Data, withReply reply: @escaping (String?) -> Void)
+    func configure(_ data: Data, standardFunctionKeys: Bool, withReply reply: @escaping (String?) -> Void)
     func stop(withReply reply: @escaping () -> Void)
     func heartbeat(withReply reply: @escaping (Bool) -> Void)
     func shortcut(_ data: Data, withReply reply: @escaping (String?) -> Void)

@@ -33,6 +33,10 @@ final class AppModel: ObservableObject {
     @Published var applying = false
     private var operation = UUID()
     private var timer: Timer?
+    private var sleepRecovery = SleepRecovery()
+    private var inputRecoveryTask: Task<Void, Never>?
+    private var wakeTask: Task<Void, Never>?
+    private var recoveringFromSleep = false
     private var active = Configuration()
     private var loadFailed = false
     private var readyForEdits = false
@@ -75,7 +79,17 @@ final class AppModel: ObservableObject {
         daemon.onFailure = { [weak self] message in
             guard let self else { return }
             self.pause()
-            if message == KeyboardStartRecovery.heldKeys { self.updater.submit(self.configuration) }
+            if KeyboardStartRecovery.canRecover(message) {
+                self.message = "Waiting for keys to be released…"
+                self.applying = true
+                let token = self.operation
+                self.inputRecoveryTask = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(nanoseconds: 1_000_000_000) } catch { return }
+                    guard let self, self.operation == token else { return }
+                    self.inputRecoveryTask = nil
+                    self.updater.submit(self.configuration)
+                }
+            }
             else { self.error = message }
         }
         driverInstaller.prepareChange = { [weak self] in self?.updater.cancel(); try self?.pauseThrowing() }
@@ -93,7 +107,29 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.refresh() }
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.pause() }
+            MainActor.assumeIsolated { self?.prepareForSleep() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.resumeAfterSleep() }
+        }
+    }
+    private func prepareForSleep() {
+        var recovery = sleepRecovery
+        recovery.sleep(active: running || applying || recoveringFromSleep)
+        pause()
+        sleepRecovery = recovery
+        daemon.disconnect()
+    }
+    private func resumeAfterSleep() {
+        guard sleepRecovery.shouldResume, wakeTask == nil else { return }
+        wakeTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: 1_000_000_000) } catch { return }
+            guard let self else { return }
+            self.wakeTask = nil
+            guard self.sleepRecovery.wake() else { return }
+            self.recoveringFromSleep = true
+            self.refreshDevices()
+            self.updater.submit(self.configuration)
         }
     }
     private func seedDemo() {
@@ -145,7 +181,8 @@ final class AppModel: ObservableObject {
             throw ClickError("Enable Keyboard Service in Settings and approve it in Login Items.")
         }
         let token = UUID(); operation = token
-        try await KeyboardStartRecovery.run(isCurrent: { self.operation == token }, waiting: {
+        defer { recoveringFromSleep = false }
+        try await KeyboardStartRecovery.run(recoveringFromSleep: recoveringFromSleep, isCurrent: { self.operation == token }, waiting: {
             self.running = false
             self.error = nil
             self.message = "Waiting for keys to be released…"
@@ -174,6 +211,7 @@ final class AppModel: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
     private func pauseThrowing() throws {
+        inputRecoveryTask?.cancel(); inputRecoveryTask = nil
         runner.cancel()
         operation = UUID()
         daemon.stop()
@@ -181,12 +219,17 @@ final class AppModel: ObservableObject {
         try hardware?.restore()
     }
     func pause() {
+        sleepRecovery.cancel()
+        wakeTask?.cancel(); wakeTask = nil
+        recoveringFromSleep = false
         updater.cancel()
         applying = false
         do { try pauseThrowing(); message = "Paused. Original mappings restored." }
         catch { self.error = error.localizedDescription }
     }
     func shutdown() -> Bool {
+        sleepRecovery.cancel()
+        wakeTask?.cancel(); wakeTask = nil
         updater.cancel()
         do { try pauseThrowing(); return true }
         catch { self.error = error.localizedDescription; return false }

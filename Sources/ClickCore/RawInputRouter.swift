@@ -12,7 +12,7 @@ public struct RawInputRouter {
     private var held: [UInt64: [Key: Output]] = [:]
     public let configuration: Configuration
     public init(configuration: Configuration) { self.configuration = configuration }
-    public mutating func input(device: UInt64, identity: DeviceIdentity, key: Key, down: Bool) -> UUID? {
+    public mutating func input(device: UInt64, identity: DeviceIdentity, key: Key, down: Bool, builtInApple: Bool = false, standardFunctionKeys: Bool = false) -> UUID? {
         if !down { held[device]?[key] = nil; return nil }
         guard held[device]?[key] == nil else { return nil }
         var output = Output.keys([key])
@@ -24,6 +24,21 @@ public struct RawInputRouter {
                 var keys: Set<Key> = [Key(page: binding.destinationPage ?? 7, usage: UInt16(binding.destination))]
                 if binding.fn == true { keys.insert(Key(page: 0x00ff, usage: 3)) }
                 output = .keys(keys)
+            }
+        }
+        else if builtInApple, key.page == 7, (58...69).contains(key.usage) {
+            let fnDown = held.values.contains { inputs in
+                inputs.contains { source, output in
+                    // Synthetic Fn attached to another F key is not a physical Fn press.
+                    guard !(source.page == 7 && (58...69).contains(source.usage)), case .keys(let keys) = output else { return false }
+                    return keys.contains(Key(page: 0x00ff, usage: 3)) || keys.contains(Key(page: 0xff01, usage: 3))
+                }
+            }
+            if fnDown == standardFunctionKeys {
+                output = .keys([AppleFunctionKeys.mediaKey(for: key.usage)])
+            } else {
+                // macOS interprets virtual F keys using the same system preference.
+                output = .keys(standardFunctionKeys ? [key] : [key, Key(page: 0x00ff, usage: 3)])
             }
         }
         held[device, default: [:]][key] = output

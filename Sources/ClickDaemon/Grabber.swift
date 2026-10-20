@@ -8,6 +8,7 @@ final class Grabber {
         let handle: IOHIDDevice
         let queue: IOHIDQueue
         let identity: DeviceIdentity
+        let builtInApple: Bool
     }
     private let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
     private var devices: [UInt64: Device] = [:]
@@ -17,6 +18,7 @@ final class Grabber {
     var onTrigger: (UUID) -> Void = { _ in }
     var onFailure: (String) -> Void = { _ in }
     private(set) var running = false
+    var standardFunctionKeys = false
     private let pages = HIDInterfacePolicy.pages
 
     func start(_ configuration: Configuration) throws {
@@ -101,7 +103,7 @@ final class Grabber {
             throw ClickError("Unable to allocate a keyboard input queue.")
         }
         for element in elements { IOHIDQueueAddElement(queue, element) }
-        devices[id] = Device(handle: device, queue: queue, identity: identity)
+        devices[id] = Device(handle: device, queue: queue, identity: identity, builtInApple: (IOHIDDeviceGetProperty(device, "Built-In" as CFString) as? NSNumber)?.boolValue == true && (IOHIDDeviceGetProperty(device, kIOHIDManufacturerKey as CFString) as? String) == "Apple")
         IOHIDQueueRegisterValueAvailableCallback(queue, { context, result, sender in
             guard let context else { return }
             let owner = Unmanaged<Grabber>.fromOpaque(context).takeUnretainedValue()
@@ -135,7 +137,7 @@ final class Grabber {
             }
             if page == 7 && usage <= 3 { continue }
             let key = RawInputRouter.Key(page: page, usage: UInt16(usage))
-            let trigger = router.input(device: id, identity: identity, key: key, down: integerValue != 0)
+            let trigger = router.input(device: id, identity: identity, key: key, down: integerValue != 0, builtInApple: devices[id]?.builtInApple == true, standardFunctionKeys: standardFunctionKeys)
             guard publish() else { return }
             if let trigger { onTrigger(trigger) }
         }
