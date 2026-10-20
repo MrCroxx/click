@@ -25,12 +25,13 @@ final class Session: NSObject, ClickDaemonProtocol {
     }
     var agent: ClickAgentProtocol? { connection.remoteObjectProxy as? ClickAgentProtocol }
     var authorized: Bool { consoleUID() == connection.effectiveUserIdentifier }
-    func configure(_ data: Data, withReply reply: @escaping (String?) -> Void) {
+    func configure(_ data: Data, standardFunctionKeys: Bool, withReply reply: @escaping (String?) -> Void) {
         DispatchQueue.main.async {
             guard self.authorized else { reply("The active user session changed."); return }
             do {
                 let configuration = try Configuration.decode(data)
                 self.grabber.stop()
+                self.grabber.standardFunctionKeys = standardFunctionKeys
                 let token = UUID(); self.operation = token; self.lastHeartbeat = Date()
                 self.configureWhenReady(configuration, token: token, deadline: Date().addingTimeInterval(3), reply: reply)
             } catch { reply(error.localizedDescription) }

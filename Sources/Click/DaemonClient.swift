@@ -39,7 +39,9 @@ import ClickIPC
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 let reply = ServiceReply { continuation.resume(with: $0) }
                 let proxy = connection.remoteObjectProxyWithErrorHandler { reply.finish(.failure($0)) } as! ClickDaemonProtocol
-                proxy.configure(data) { message in
+                let standard = (CFPreferencesCopyValue("com.apple.keyboard.fnState" as CFString, kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesCurrentHost) as? NSNumber)?.boolValue
+                    ?? UserDefaults.standard.bool(forKey: "com.apple.keyboard.fnState")
+                proxy.configure(data, standardFunctionKeys: standard) { message in
                     if let message { reply.finish(.failure(ClickError(message))) }
                     else { reply.finish(.success(())) }
                 }
@@ -66,6 +68,12 @@ import ClickIPC
         generation = UUID()
         active = false; heartbeatTimer?.invalidate(); heartbeatTimer = nil
         (connection?.remoteObjectProxy as? ClickDaemonProtocol)?.stop {}
+    }
+    func disconnect() {
+        stop()
+        let old = connection
+        connection = nil
+        old?.invalidate()
     }
     func shortcut(_ shortcut: Shortcut) async throws {
         guard active, let connection else { throw ClickError("Keyboard service is not running.") }

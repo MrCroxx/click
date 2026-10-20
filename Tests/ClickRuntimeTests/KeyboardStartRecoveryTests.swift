@@ -3,6 +3,18 @@ import ClickCore
 @testable import Click
 
 final class KeyboardStartRecoveryTests: XCTestCase {
+    @MainActor func testRolloverRecoveryWaitsUntilAllKeysAreReleased() async throws {
+        XCTAssertTrue(KeyboardStartRecovery.canRecover("Keyboard reported a rollover error. Mappings paused."))
+        XCTAssertFalse(KeyboardStartRecovery.canRecover("Input Monitoring denied"))
+        var pressed = true, starts = 0, waits = 0
+        try await KeyboardStartRecovery.run(isCurrent: { true }, waiting: { waits += 1 }, delay: { pressed = false }) {
+            starts += 1
+            if pressed { throw ClickError(KeyboardStartRecovery.heldKeys) }
+        }
+        XCTAssertEqual(starts, 2)
+        XCTAssertEqual(waits, 1)
+    }
+
     @MainActor func testHeldKeysRecoverWithoutManualResume() async throws {
         var attempts = 0, waits = 0
         try await KeyboardStartRecovery.run(isCurrent: { true }, waiting: { waits += 1 }, delay: {}) {
