@@ -8,6 +8,7 @@ final class Grabber {
         let handle: IOHIDDevice
         let queue: IOHIDQueue
         let identity: DeviceIdentity
+        let profile: DeviceProfile
         let builtInApple: Bool
     }
     private let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
@@ -36,7 +37,10 @@ final class Grabber {
         IOHIDManagerRegisterDeviceRemovalCallback(manager, { context, _, _, device in
             guard let context else { return }
             let owner = Unmanaged<Grabber>.fromOpaque(context).takeUnretainedValue()
-            owner.remove(owner.registryID(device))
+            let id = owner.registryID(device)
+            owner.remove(id)
+            guard owner.running else { return }
+            do { try owner.reconcile(excluding: id) } catch { owner.fail(error.localizedDescription) }
         }, context)
         // The manager only enumerates. Each configured physical device is opened
         // separately with SeizeDevice, after the virtual keyboard is ready.
@@ -55,8 +59,7 @@ final class Grabber {
         func string(_ key: String) -> String { IOHIDDeviceGetProperty(device, key as CFString) as? String ?? "" }
         guard !(number(kIOHIDVendorIDKey) == 0x16c0 && number(kIOHIDProductIDKey) == 0x27db),
               !string(kIOHIDProductKey).localizedCaseInsensitiveContains("virtual") else { return nil }
-        let identity = DeviceIdentity(vendor: number(kIOHIDVendorIDKey), product: number(kIOHIDProductIDKey), serial: string(kIOHIDSerialNumberKey), location: number(kIOHIDLocationIDKey))
-        return router.configuration.profiles.contains(where: { $0.enabled && !$0.bindings.isEmpty && $0.device.matches(identity) }) ? identity : nil
+        return DeviceIdentity(vendor: number(kIOHIDVendorIDKey), product: number(kIOHIDProductIDKey), serial: string(kIOHIDSerialNumberKey), location: number(kIOHIDLocationIDKey))
     }
     private func inputElements(_ device: IOHIDDevice) -> [IOHIDElement] {
         let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? 0
@@ -68,22 +71,32 @@ final class Grabber {
             HIDInterfacePolicy.isKeyValue(vendor: vendor, isBuiltInApple: builtIn && manufacturer == "Apple", page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0), reportSize: IOHIDElementGetReportSize($0))
         }
     }
-    private func reconcile() throws {
+    private func reconcile(excluding removedID: UInt64? = nil) throws {
         let connected = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? []
-        let candidates = connected.compactMap { device -> (IOHIDDevice, DeviceIdentity, [IOHIDElement])? in
-            guard let identity = identity(device) else { return nil }
-            return (device, identity, inputElements(device))
+        let inventory = connected.compactMap { device -> (IOHIDDevice, DeviceIdentity)? in
+            guard registryID(device) != removedID, let identity = identity(device) else { return nil }
+            return (device, identity)
         }
-        let selected = try HIDInterfacePolicy.select(candidates.map { device, identity, elements in
+        let resolver = DeviceProfileResolver(profiles: router.configuration.profiles, connected: inventory.map { $0.1 })
+        let candidates = inventory.compactMap { device, identity -> (IOHIDDevice, DeviceIdentity, DeviceProfile, [IOHIDElement])? in
+            guard let profile = resolver.profile(for: identity), profile.enabled, !profile.bindings.isEmpty else { return nil }
+            return (device, identity, profile, inputElements(device))
+        }
+        let selected = try HIDInterfacePolicy.select(candidates.map { device, identity, _, elements in
             .init(id: registryID(device), identity: identity, supported: HIDInterfacePolicy.supports(elements.map {
                 .init(page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0))
             }))
         })
-        for (device, identity, elements) in candidates where selected.contains(registryID(device)) {
-            try add(device, identity: identity, elements: elements)
+        // A second same-model keyboard can make a previous fallback ambiguous.
+        // Release its held output and capture before considering new matches.
+        for (id, captured) in Array(devices) {
+            if !selected.contains(id) || resolver.profile(for: captured.identity)?.id != captured.profile.id { remove(id) }
+        }
+        for (device, identity, profile, elements) in candidates where selected.contains(registryID(device)) {
+            try add(device, identity: identity, profile: profile, elements: elements)
         }
     }
-    private func add(_ device: IOHIDDevice, identity: DeviceIdentity, elements: [IOHIDElement]) throws {
+    private func add(_ device: IOHIDDevice, identity: DeviceIdentity, profile: DeviceProfile, elements: [IOHIDElement]) throws {
         let id = registryID(device)
         guard devices[id] == nil else { return }
         guard IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) == kIOReturnSuccess else {
@@ -103,7 +116,7 @@ final class Grabber {
             throw ClickError("Unable to allocate a keyboard input queue.")
         }
         for element in elements { IOHIDQueueAddElement(queue, element) }
-        devices[id] = Device(handle: device, queue: queue, identity: identity, builtInApple: (IOHIDDeviceGetProperty(device, "Built-In" as CFString) as? NSNumber)?.boolValue == true && (IOHIDDeviceGetProperty(device, kIOHIDManufacturerKey as CFString) as? String) == "Apple")
+        devices[id] = Device(handle: device, queue: queue, identity: identity, profile: profile, builtInApple: (IOHIDDeviceGetProperty(device, "Built-In" as CFString) as? NSNumber)?.boolValue == true && (IOHIDDeviceGetProperty(device, kIOHIDManufacturerKey as CFString) as? String) == "Apple")
         IOHIDQueueRegisterValueAvailableCallback(queue, { context, result, sender in
             guard let context else { return }
             let owner = Unmanaged<Grabber>.fromOpaque(context).takeUnretainedValue()
@@ -120,7 +133,9 @@ final class Grabber {
         for (id, device) in devices {
             var count = 0
             while count < 1024, let value = IOHIDQueueCopyNextValueWithTimeout(device.queue, 0) {
-                pending.append((id, device.identity, value)); count += 1
+                // Route using the resolved profile identity, without rewriting
+                // the saved port or broadening RawInputRouter's strict matching.
+                pending.append((id, device.profile.device, value)); count += 1
             }
             more = more || count == 1024
         }
