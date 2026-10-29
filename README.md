@@ -78,7 +78,7 @@ Files live in `~/Library/Application Support/Click/`:
 - `config.json` — atomically saved, validated configuration, restricted to the current user.
 - `recovery.json` — legacy mapping journal, retained for migration from v0.1.x.
 
-Device identity uses vendor/product and serial number when present, otherwise the connection location. Devices without serial numbers may need a new profile after changing USB ports. Multiple keyboard interfaces with the same identity share a profile. Physical connection changes are handled by IOHID callbacks; UI discovery refreshes every two seconds.
+Device identity uses vendor/product and serial number when present, otherwise the connection location. When an anonymous keyboard changes location, Click reuses its profile if there is exactly one saved profile and one connected keyboard of that model, without rewriting the saved location or mappings. Multiple profiles (including disabled ones) or connected keyboards of the same model disable this fallback; exact identity matching still applies. Multiple keyboard interfaces with the same identity share a profile. IOHID callbacks reassess matches and release devices that no longer match; UI discovery refreshes every two seconds.
 
 New mappings use exclusive HID capture and virtual HID output, without modifying system mapping properties. `recovery.json` is retained only to restore mappings left by older releases. Corrupt configuration/recovery files cause an error rather than being overwritten. Exported configuration can contain serial numbers and macro text; review it before publishing.
 

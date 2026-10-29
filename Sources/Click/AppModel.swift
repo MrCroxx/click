@@ -164,11 +164,16 @@ final class AppModel: ObservableObject {
         if running && !accessibility && !active.macros.isEmpty { runner.cancel() }
     }
     func addDevice(_ device: ConnectedDevice) {
-        if let profile = configuration.profiles.first(where: { $0.device.matches(device.identity) }) { selectedProfile = profile.id; return }
+        if let profile = deviceResolver.profile(for: device.identity) { selectedProfile = profile.id; return }
         let profile = DeviceProfile(name: device.name, device: device.identity)
         configuration.profiles.append(profile); selectedProfile = profile.id
     }
-    func connected(_ profile: DeviceProfile) -> Bool { demo || devices.contains { profile.device.matches($0.identity) } }
+    private var deviceResolver: DeviceProfileResolver {
+        DeviceProfileResolver(profiles: configuration.profiles, connected: devices.map(\.identity))
+    }
+    func connected(_ profile: DeviceProfile) -> Bool {
+        demo || devices.contains { deviceResolver.profile(for: $0.identity)?.id == profile.id }
+    }
     func start() async throws {
         guard !demo else { return }
         guard !loadFailed else { throw ClickError("Startup recovery failed. Repair the configuration and restart Click before saving.") }
