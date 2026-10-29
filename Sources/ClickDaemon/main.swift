@@ -39,7 +39,7 @@ final class Session: NSObject, ClickDaemonProtocol {
     }
     private func configureWhenReady(_ configuration: Configuration, token: UUID, deadline: Date, reply: @escaping (String?) -> Void) {
         guard operation == token, authorized else { reply("Keyboard output cancelled."); return }
-        if !click_hid_ready() && Date() < deadline {
+        if (!click_hid_ready() || !click_hid_pointing_ready()) && Date() < deadline {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 self.configureWhenReady(configuration, token: token, deadline: deadline, reply: reply)
             }
@@ -53,7 +53,7 @@ final class Session: NSObject, ClickDaemonProtocol {
     func heartbeat(withReply reply: @escaping (Bool) -> Void) {
         DispatchQueue.main.async {
             guard self.authorized else { self.grabber.stop(); reply(false); return }
-            self.lastHeartbeat = Date(); reply(self.grabber.running && click_hid_ready())
+            self.lastHeartbeat = Date(); reply(self.grabber.running && self.grabber.outputReady)
         }
     }
     func shortcut(_ data: Data, withReply reply: @escaping (String?) -> Void) {
@@ -121,7 +121,7 @@ final class Listener: NSObject, NSXPCListenerDelegate {
     }
     func check() {
         guard let session else { return }
-        if !session.authorized || Date().timeIntervalSince(session.lastHeartbeat) > 5 || (session.grabber.running && !click_hid_ready()) {
+        if !session.authorized || Date().timeIntervalSince(session.lastHeartbeat) > 5 || (session.grabber.running && !session.grabber.outputReady) {
             session.invalidate(); session.agent?.failed("Keyboard service disconnected. Mappings paused.")
             session.connection.invalidate()
         }

@@ -8,7 +8,9 @@ extern "C" {
 void click_hid_start(void);
 void click_hid_stop(void);
 bool click_hid_ready(void);
+bool click_hid_pointing_ready(void);
 void click_hid_report(uint32_t page, const uint16_t *keys, int count);
+void click_hid_pointing_report(uint32_t buttons, int8_t x, int8_t y, int8_t vertical, int8_t horizontal);
 
 #ifdef __cplusplus
 }

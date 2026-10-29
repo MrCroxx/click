@@ -43,10 +43,25 @@ final class HIDInterfacePolicyTests: XCTestCase {
     func testOnlyUnsupportedInterfaceFails() {
         XCTAssertThrowsError(try HIDInterfacePolicy.select([.init(id: 1, identity: keyboard, supported: false)]))
     }
-    func testPointerInputsAreNotPartiallyCaptured() {
+    func testUnsupportedAxesAreNotPartiallyCaptured() {
         XCTAssertTrue(HIDInterfacePolicy.supports([.init(page: 7, usage: 4), .init(page: 7, usage: UInt32.max)]))
-        XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 7, usage: 4), .init(page: 9, usage: 1)]))
+        XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 7, usage: 4), .init(page: 9, usage: 33)]))
         XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 7, usage: 4), .init(page: 1, usage: 0x30)]))
         XCTAssertFalse(HIDInterfacePolicy.supports([]))
+    }
+    func testBluetoothCompoundKeyboardInputs() {
+        let inputs: [HIDInterfacePolicy.Input] = [
+            .init(page: 7, usage: 4), .init(page: 9, usage: 8),
+            .init(page: 1, usage: 0x30, isRelative: true, reportSize: 8),
+            .init(page: 1, usage: 0x31, isRelative: true, reportSize: 8),
+            .init(page: 1, usage: 0x38, isRelative: true, reportSize: 8),
+            .init(page: 12, usage: 0x238, isRelative: true, reportSize: 8)
+        ] + (1...183).map { .init(page: 1, usage: UInt32($0), isArray: true) }
+        XCTAssertTrue(HIDInterfacePolicy.supports(inputs))
+        XCTAssertEqual(HIDInterfacePolicy.Input(page: 1, usage: 0x30, isArray: true).kind, .key)
+        XCTAssertEqual(HIDInterfacePolicy.Input(page: 12, usage: 0x238, isArray: true).kind, .key)
+        XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 1, usage: 0x32, isRelative: true)]))
+        XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 1, usage: 0x30, isRelative: true, reportSize: 32)]))
+        XCTAssertFalse(HIDInterfacePolicy.supports([.init(page: 1, usage: 256, isArray: true)]))
     }
 }
