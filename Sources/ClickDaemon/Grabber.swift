@@ -10,10 +10,12 @@ final class Grabber {
         let identity: DeviceIdentity
         let profile: DeviceProfile
         let builtInApple: Bool
+        let hasPointing: Bool
     }
     private let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
     private var devices: [UInt64: Device] = [:]
     private var router = RawInputRouter(configuration: Configuration())
+    private var pointing = PointingInputRouter()
     private var macroKeys = Set<RawInputRouter.Key>()
     private var generation = UUID()
     var onTrigger: (UUID) -> Void = { _ in }
@@ -21,6 +23,9 @@ final class Grabber {
     private(set) var running = false
     var standardFunctionKeys = false
     private let pages = HIDInterfacePolicy.pages
+    var outputReady: Bool {
+        click_hid_ready() && (!devices.values.contains(where: \.hasPointing) || click_hid_pointing_ready())
+    }
 
     func start(_ configuration: Configuration) throws {
         stop()
@@ -71,6 +76,11 @@ final class Grabber {
             HIDInterfacePolicy.isKeyValue(vendor: vendor, isBuiltInApple: builtIn && manufacturer == "Apple", page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0), reportSize: IOHIDElementGetReportSize($0))
         }
     }
+    private func input(_ element: IOHIDElement) -> HIDInterfacePolicy.Input {
+        .init(page: IOHIDElementGetUsagePage(element), usage: IOHIDElementGetUsage(element),
+              isArray: IOHIDElementIsArray(element), isRelative: IOHIDElementIsRelative(element),
+              reportSize: IOHIDElementGetReportSize(element))
+    }
     private func reconcile(excluding removedID: UInt64? = nil) throws {
         let connected = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? []
         let inventory = connected.compactMap { device -> (IOHIDDevice, DeviceIdentity)? in
@@ -83,9 +93,7 @@ final class Grabber {
             return (device, identity, profile, inputElements(device))
         }
         let selected = try HIDInterfacePolicy.select(candidates.map { device, identity, _, elements in
-            .init(id: registryID(device), identity: identity, supported: HIDInterfacePolicy.supports(elements.map {
-                .init(page: IOHIDElementGetUsagePage($0), usage: IOHIDElementGetUsage($0))
-            }))
+            .init(id: registryID(device), identity: identity, supported: HIDInterfacePolicy.supports(elements.map(input)))
         })
         // A second same-model keyboard can make a previous fallback ambiguous.
         // Release its held output and capture before considering new matches.
@@ -99,12 +107,17 @@ final class Grabber {
     private func add(_ device: IOHIDDevice, identity: DeviceIdentity, profile: DeviceProfile, elements: [IOHIDElement]) throws {
         let id = registryID(device)
         guard devices[id] == nil else { return }
+        let hasPointing = elements.contains { [.button, .motion].contains(input($0).kind) }
+        guard !hasPointing || click_hid_pointing_ready() else {
+            throw ClickError("Virtual keyboard disconnected. Mappings paused.")
+        }
         guard IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) == kIOReturnSuccess else {
             throw ClickError("Unable to capture the keyboard. Check Input Monitoring and competing keyboard tools.")
         }
         let initialValue = UnsafeMutablePointer<Unmanaged<IOHIDValue>>.allocate(capacity: 1)
         defer { initialValue.deallocate() }
-        for element in elements {
+        // Relative axes contain the last delta, not a held input state.
+        for element in elements where input(element).kind != .motion {
             if IOHIDDeviceGetValue(device, element, initialValue) == kIOReturnSuccess,
                IOHIDValueGetIntegerValue(initialValue.pointee.takeUnretainedValue()) != 0 {
                 IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
@@ -116,7 +129,7 @@ final class Grabber {
             throw ClickError("Unable to allocate a keyboard input queue.")
         }
         for element in elements { IOHIDQueueAddElement(queue, element) }
-        devices[id] = Device(handle: device, queue: queue, identity: identity, profile: profile, builtInApple: (IOHIDDeviceGetProperty(device, "Built-In" as CFString) as? NSNumber)?.boolValue == true && (IOHIDDeviceGetProperty(device, kIOHIDManufacturerKey as CFString) as? String) == "Apple")
+        devices[id] = Device(handle: device, queue: queue, identity: identity, profile: profile, builtInApple: (IOHIDDeviceGetProperty(device, "Built-In" as CFString) as? NSNumber)?.boolValue == true && (IOHIDDeviceGetProperty(device, kIOHIDManufacturerKey as CFString) as? String) == "Apple", hasPointing: hasPointing)
         IOHIDQueueRegisterValueAvailableCallback(queue, { context, result, sender in
             guard let context else { return }
             let owner = Unmanaged<Grabber>.fromOpaque(context).takeUnretainedValue()
@@ -127,7 +140,7 @@ final class Grabber {
         IOHIDQueueStart(queue)
     }
     private func drain() {
-        guard running, click_hid_ready() else { fail("Virtual keyboard disconnected. Mappings paused."); return }
+        guard running, outputReady else { fail("Virtual keyboard disconnected. Mappings paused."); return }
         var pending: [(UInt64, DeviceIdentity, IOHIDValue)] = []
         var more = false
         for (id, device) in devices {
@@ -142,11 +155,31 @@ final class Grabber {
         // Yield so a busy device cannot starve IPC, stop requests or the watchdog.
         if more { DispatchQueue.main.async { [weak self] in if self?.running == true { self?.drain() } } }
         pending.sort { IOHIDValueGetTimeStamp($0.2) < IOHIDValueGetTimeStamp($1.2) }
+        var pointerFrame: [PointingInputRouter.Value] = []
+        var frameID: UInt64 = 0, frameTime: UInt64 = 0
+        var frameReport: UInt32 = 0
+        func flushPointer() {
+            guard !pointerFrame.isEmpty else { return }
+            for report in pointing.input(device: frameID, values: pointerFrame) { publishPointer(report) }
+            pointerFrame.removeAll(keepingCapacity: true)
+        }
         for (id, identity, value) in pending {
             let element = IOHIDValueGetElement(value)
+            let description = input(element)
+            let timestamp = IOHIDValueGetTimeStamp(value), reportID = IOHIDElementGetReportID(element)
+            if id != frameID || timestamp != frameTime || reportID != frameReport { flushPointer() }
+            frameID = id; frameTime = timestamp; frameReport = reportID
             let usage = IOHIDElementGetUsage(element), page = IOHIDElementGetUsagePage(element)
             guard usage > 0, usage <= UInt16.max else { continue }
             let integerValue = IOHIDValueGetIntegerValue(value)
+            if description.kind == .button || description.kind == .motion {
+                guard description.kind != .motion || (-32768...32767).contains(integerValue) else {
+                    fail("This keyboard interface contains unsupported HID inputs. It was not captured."); return
+                }
+                pointerFrame.append(.init(input: description, value: integerValue))
+                continue
+            }
+            flushPointer()
             if HIDInterfacePolicy.reportsKeyboardError(page: page, usage: usage, value: integerValue) {
                 fail("Keyboard reported a rollover error. Mappings paused."); return
             }
@@ -156,6 +189,10 @@ final class Grabber {
             guard publish() else { return }
             if let trigger { onTrigger(trigger) }
         }
+        flushPointer()
+    }
+    private func publishPointer(_ report: PointingInputRouter.Report) {
+        click_hid_pointing_report(report.buttons, report.x, report.y, report.vertical, report.horizontal)
     }
     @discardableResult private func publish() -> Bool {
         let keys = router.keys.union(macroKeys)
@@ -191,6 +228,7 @@ final class Grabber {
         IOHIDQueueUnscheduleFromRunLoop(device.queue, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
         IOHIDDeviceClose(device.handle, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
         router.disconnect(id)
+        if device.hasPointing { publishPointer(pointing.disconnect(id)) }
         _ = publish()
     }
     private func fail(_ message: String) { stop(); onFailure(message) }
@@ -198,6 +236,7 @@ final class Grabber {
         running = false; generation = UUID()
         IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
         router.reset(); macroKeys.removeAll()
+        if devices.values.contains(where: \.hasPointing) { publishPointer(pointing.reset()) }
         _ = publish()
         for id in Array(devices.keys) { remove(id) }
     }

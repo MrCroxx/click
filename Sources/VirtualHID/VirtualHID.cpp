@@ -7,6 +7,7 @@ using Client = pqrs::karabiner::driverkit::virtual_hid_device_service::client;
 namespace reports = pqrs::karabiner::driverkit::virtual_hid_device_driver::hid_report;
 std::unique_ptr<Client> client;
 std::atomic<bool> ready{false};
+std::atomic<bool> pointing_ready{false};
 template<class Report> void report(const uint16_t *keys, int count) {
     Report r;
     for (int i = 0; i < count; ++i) r.keys.insert(keys[i]);
@@ -20,15 +21,26 @@ void click_hid_start() {
     client = std::make_unique<Client>();
     client->connected.connect([] {
         client->async_virtual_hid_keyboard_initialize({});
+        client->async_virtual_hid_pointing_initialize();
     });
     client->virtual_hid_keyboard_ready.connect([](bool value) { ready = value; });
-    client->closed.connect([] { ready = false; });
-    client->error_occurred.connect([](auto&&) { ready = false; });
-    client->driver_version_mismatched.connect([](bool value) { if (value) ready = false; });
+    client->virtual_hid_pointing_ready.connect([](bool value) { pointing_ready = value; });
+    client->closed.connect([] { ready = false; pointing_ready = false; });
+    client->error_occurred.connect([](auto&&) { ready = false; pointing_ready = false; });
+    client->driver_version_mismatched.connect([](bool value) { if (value) { ready = false; pointing_ready = false; } });
     client->async_start();
 }
-void click_hid_stop() { ready = false; client.reset(); }
+void click_hid_stop() { ready = false; pointing_ready = false; client.reset(); }
 bool click_hid_ready() { return ready; }
+bool click_hid_pointing_ready() { return pointing_ready; }
+void click_hid_pointing_report(uint32_t buttons, int8_t x, int8_t y, int8_t vertical, int8_t horizontal) {
+    if (!client || !pointing_ready) return;
+    reports::pointing_input r;
+    for (uint32_t i = 0; i < 32; ++i) if (buttons & (uint32_t(1) << i)) r.buttons.insert(i + 1);
+    r.x = static_cast<uint8_t>(x); r.y = static_cast<uint8_t>(y);
+    r.vertical_wheel = static_cast<uint8_t>(vertical); r.horizontal_wheel = static_cast<uint8_t>(horizontal);
+    client->async_post_report(r);
+}
 void click_hid_report(uint32_t page, const uint16_t *keys, int count) {
     if (!client || !ready || count < 0 || count > 256) return;
     switch (page) {

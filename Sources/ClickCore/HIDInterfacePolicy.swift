@@ -16,12 +16,31 @@ public enum HIDInterfacePolicy {
     public struct Input {
         public let page: UInt32
         public let usage: UInt32
-        public init(page: UInt32, usage: UInt32) { self.page = page; self.usage = usage }
-    }
-    public static func supports(_ inputs: [Input]) -> Bool {
-        !inputs.isEmpty && inputs.allSatisfy {
-            pages.contains($0.page) && ($0.page != 1 || (0x81...0x93).contains($0.usage))
+        public let isArray: Bool
+        public let isRelative: Bool
+        public let reportSize: UInt32
+        public init(page: UInt32, usage: UInt32, isArray: Bool = false, isRelative: Bool = false, reportSize: UInt32 = 1) {
+            self.page = page; self.usage = usage; self.isArray = isArray; self.isRelative = isRelative; self.reportSize = reportSize
         }
+        public var kind: InputKind {
+            // Array entries are boolean selectors, even when their usage number
+            // is also used by an axis (e.g. Generic Desktop X).
+            if isRelative {
+                if !isArray && reportSize <= 16 && ((page == 1 && [0x30, 0x31, 0x38].contains(usage)) || (page == 12 && usage == 0x238)) {
+                    return .motion
+                }
+                return .unsupported
+            }
+            if page == 9 { return (1...32).contains(usage) ? .button : .unsupported }
+            if page == 1 {
+                return (isArray ? (1...255).contains(usage) : (0x81...0x93).contains(usage)) ? .key : .unsupported
+            }
+            return HIDInterfacePolicy.pages.contains(page) ? .key : .unsupported
+        }
+    }
+    public enum InputKind { case key, button, motion, unsupported }
+    public static func supports(_ inputs: [Input]) -> Bool {
+        !inputs.isEmpty && inputs.allSatisfy { $0.kind != .unsupported }
     }
     public struct Interface {
         public let id: UInt64
